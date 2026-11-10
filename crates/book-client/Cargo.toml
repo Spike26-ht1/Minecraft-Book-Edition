@@ -6,8 +6,9 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
-book-core = { path = "../book-core" }
-book-world = { path = "../book-world" }
+book-renderer-api = { path = "../book-renderer-api" }
+book-renderer-opengl = { path = "../book-renderer-opengl" }
+glium = "0.36"
 
 [lints]
 workspace = true

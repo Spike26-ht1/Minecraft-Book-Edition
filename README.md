@@ -1,48 +1,38 @@
-# Minecraft Book Edition
+# Minecraft Book Edition 26.60
 
-**Minecraft Book Edition** is an independent, open-source voxel sandbox project written in Rust.
+An independent, open-source voxel sandbox project written in Rust.
 
-Its goal is to build a lightweight, modular game that combines ideas from the Java and Bedrock content ecosystems:
+The goal is a lightweight, modular game with a native engine and a community-led compatibility path for selected Java content mods and Bedrock add-ons/resource packs.
 
-- Bedrock-inspired resource packs and texture atlases.
-- A community-led path toward importing selected Java content mods.
-- A native Rust engine with a strong focus on performance and low memory use.
-- A codebase designed to be easy to understand, extend, and contribute to.
+## 26.60 status
 
-> This is a new, independent implementation. It does not contain or redistribute Minecraft source code or proprietary game assets.
+This is the first development foundation and OpenGL renderer prototype:
 
-## Project status
+- Rust workspace split into focused crates.
+- Shared block identifiers and block registry.
+- 16 × 16 × 16 chunk-section storage.
+- Bedrock-style terrain_texture.json metadata reader.
+- CPU chunk meshing with hidden-face removal.
+- Backend-independent renderer contract.
+- OpenGL window and animated cube smoke test.
 
-The project is at its foundation stage. The current workspace establishes the first reusable pieces of the engine:
-
-- `book-core`: block identifiers, atlas coordinates, and a block registry.
-- `book-world`: fixed-size chunk sections and block storage.
-- `book-client`: an initial executable entry point.
-
-There is no playable renderer yet. Rendering, input, world generation, saving, networking, and compatibility layers will be developed incrementally.
+**This is not yet a playable Minecraft-compatible game.** It does not yet load a complete Bedrock resource pack, generate or save worlds, connect to servers, or run Java mods. The cube is a renderer test, not the final chunk renderer.
 
 ## Build
 
-Install a stable Rust toolchain, then run:
+Install stable Rust and a desktop OpenGL driver.
 
-```sh
-cargo build --workspace
-cargo test --workspace
-cargo run -p book-client
-```
+    cargo build --workspace
+    cargo run -p book-client
+    cargo test --workspace
+    cargo fmt --all -- --check
 
-The initial core avoids platform-specific graphics dependencies. This makes the data layer easier to build and test across targets, including 32-bit and 64-bit x86 where the Rust toolchain and operating system support them.
+## Platform policy
 
-## Compatibility strategy
+The data crates are platform-independent. x86 and x86_64 are project targets, but each renderer/windowing dependency must be verified for the exact target and operating system. This first OpenGL prototype is a desktop milestone; Android and 32-bit release packages are not ready yet.
 
-Compatibility is incremental, not automatic. The project will first define its own stable content model. Community contributors can then implement and test importers for Bedrock resource packs, Bedrock add-ons, and selected Java mod content.
+## Compatibility policy
 
-Java mods that replace renderer internals or depend on Java-specific engine hooks are outside the initial compatibility target.
+Compatibility will be added format by format and mod by mod. Java mods that depend on Java-specific renderer internals, mixins, or engine replacement are not initial targets. Bedrock atlas metadata support is being developed independently of proprietary game code and assets.
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## License
-
-The project is licensed under the MIT License. See [LICENSE](LICENSE).
+Read CONTRIBUTING.md and docs/ARCHITECTURE.md before contributing. The project uses the MIT License; third-party dependencies retain their own licenses.
