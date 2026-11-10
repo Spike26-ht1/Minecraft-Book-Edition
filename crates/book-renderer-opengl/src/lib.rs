@@ -1,4 +1,7 @@
+use book_core::{AtlasTile, BlockDefinition, BlockId, BlockRegistry};
+use book_meshing::mesh_section;
 use book_renderer_api::{GraphicsApi, RendererBackend, RendererError, RendererInfo, RenderFrame};
+use book_world::{ChunkSection, SECTION_EDGE};
 use glium::backend::glutin::SimpleWindowBuilder;
 use glium::index::NoIndices;
 use glium::uniform;
@@ -9,37 +12,49 @@ use std::time::Instant;
 #[derive(Clone, Copy)]
 struct Vertex {
     position: [f32; 3],
-    color: [f32; 3],
+    uv: [f32; 2],
 }
-implement_vertex!(Vertex, position, color);
+
+implement_vertex!(Vertex, position, uv);
 
 const VERTEX_SHADER: &str = r#"
 #version 140
 in vec3 position;
-in vec3 color;
-out vec3 v_color;
+in vec2 uv;
+out vec2 v_uv;
 uniform float u_time;
+
 void main() {
-    float c = cos(u_time * 0.5);
-    float s = sin(u_time * 0.5);
-    vec3 p = vec3(position.x * c + position.z * s,
-                  position.y,
-                  -position.x * s + position.z * c);
-    gl_Position = vec4(p.xy * 0.65, p.z * 0.2, 1.0);
-    v_color = color;
+    vec3 centered = position - vec3(8.0, 0.0, 8.0);
+    float angle = 0.42 + sin(u_time * 0.12) * 0.08;
+    float c = cos(angle);
+    float s = sin(angle);
+    float rotated_x = centered.x * c - centered.z * s;
+    float rotated_z = centered.x * s + centered.z * c;
+
+    float screen_x = rotated_x * 0.075;
+    float screen_y = centered.y * 0.13 - rotated_z * 0.045;
+    float depth = 0.5 + rotated_z * 0.001 - centered.y * 0.001;
+    gl_Position = vec4(screen_x, screen_y, depth, 1.0);
+    v_uv = uv;
 }
 "#;
 
 const FRAGMENT_SHADER: &str = r#"
 #version 140
-in vec3 v_color;
+in vec2 v_uv;
 out vec4 out_color;
-void main() { out_color = vec4(v_color, 1.0); }
+
+void main() {
+    float texture_hint = 0.94 + fract(v_uv.x * 16.0) * 0.06;
+    vec3 grass = vec3(0.30, 0.58, 0.25);
+    out_color = vec4(grass * texture_hint, 1.0);
+}
 "#;
 
 pub struct OpenGlRenderer {
     display: glium::backend::glutin::Display<WindowSurface>,
-    vertices: VertexBuffer<Vertex>,
+    chunk_vertices: VertexBuffer<Vertex>,
     program: Program,
     started: Instant,
 }
@@ -56,24 +71,27 @@ impl OpenGlRenderer {
             .with_inner_size(width, height)
             .build(event_loop);
 
-        let vertices = VertexBuffer::new(&display, &cube_vertices())
-            .map_err(|e| RendererError::new(format!("Vertex buffer: {e}")))?;
+        let chunk_vertices = VertexBuffer::new(&display, &demo_chunk_vertices())
+            .map_err(|error| RendererError::new(format!("Chunk vertex buffer: {error}")))?;
         let program = Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None)
-            .map_err(|e| RendererError::new(format!("Shader program: {e}")))?;
+            .map_err(|error| RendererError::new(format!("Chunk shader program: {error}")))?;
 
-        Ok((window, Self {
-            display,
-            vertices,
-            program,
-            started: Instant::now(),
-        }))
+        Ok((
+            window,
+            Self {
+                display,
+                chunk_vertices,
+                program,
+                started: Instant::now(),
+            },
+        ))
     }
 }
 
 impl RendererBackend for OpenGlRenderer {
     fn info(&self) -> RendererInfo {
         RendererInfo {
-            name: "Book OpenGL Renderer".to_owned(),
+            name: "Book OpenGL Chunk Renderer".to_owned(),
             api: GraphicsApi::OpenGl,
             api_version: "OpenGL via Glium/Glutin".to_owned(),
         }
@@ -81,43 +99,62 @@ impl RendererBackend for OpenGlRenderer {
 
     fn render(&mut self, frame: &RenderFrame) -> Result<(), RendererError> {
         let mut target = self.display.draw();
-        let c = frame.clear_color;
-        target.clear_color_and_depth((c.red, c.green, c.blue, c.alpha), 1.0);
+        let clear = frame.clear_color;
+        target.clear_color_and_depth(
+            (clear.red, clear.green, clear.blue, clear.alpha),
+            1.0,
+        );
 
-        let params = DrawParameters {
-            depth: Depth { test: DepthTest::IfLess, write: true, ..Depth::default() },
+        let parameters = DrawParameters {
+            depth: Depth {
+                test: DepthTest::IfLess,
+                write: true,
+                ..Depth::default()
+            },
             ..DrawParameters::default()
         };
-        let elapsed = self.started.elapsed().as_secs_f32();
-        target.draw(
-            &self.vertices,
-            NoIndices(glium::index::PrimitiveType::TrianglesList),
-            &self.program,
-            &uniform! { u_time: elapsed },
-            &params,
-        ).map_err(|e| RendererError::new(format!("OpenGL draw: {e}")))?;
 
-        target.finish().map_err(|e| RendererError::new(format!("OpenGL present: {e}")))
+        let elapsed = self.started.elapsed().as_secs_f32();
+        target
+            .draw(
+                &self.chunk_vertices,
+                NoIndices(glium::index::PrimitiveType::TrianglesList),
+                &self.program,
+                &uniform! { u_time: elapsed },
+                &parameters,
+            )
+            .map_err(|error| RendererError::new(format!("OpenGL chunk draw: {error}")))?;
+
+        target
+            .finish()
+            .map_err(|error| RendererError::new(format!("OpenGL present: {error}")))
     }
 }
 
-fn cube_vertices() -> Vec<Vertex> {
-    let p = [
-        [-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [0.5, 0.5, -0.5],
-        [-0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [-0.5, 0.5, -0.5],
-        [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5],
-        [-0.5, -0.5, 0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5],
-        [-0.5, -0.5, -0.5], [-0.5, -0.5, 0.5], [-0.5, 0.5, 0.5],
-        [-0.5, -0.5, -0.5], [-0.5, 0.5, 0.5], [-0.5, 0.5, -0.5],
-        [0.5, -0.5, -0.5], [0.5, 0.5, 0.5], [0.5, -0.5, 0.5],
-        [0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [0.5, 0.5, 0.5],
-        [-0.5, -0.5, -0.5], [0.5, -0.5, 0.5], [0.5, -0.5, -0.5],
-        [-0.5, -0.5, -0.5], [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5],
-        [-0.5, 0.5, -0.5], [0.5, 0.5, -0.5], [0.5, 0.5, 0.5],
-        [-0.5, 0.5, -0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5],
-    ];
-    p.iter().enumerate().map(|(i, position)| {
-        let shade = 0.35 + (i / 6) as f32 * 0.09;
-        Vertex { position: *position, color: [shade, shade + 0.12, 0.95] }
-    }).collect()
+/// Builds a small test terrain through the same CPU mesher used by world chunks.
+fn demo_chunk_vertices() -> Vec<Vertex> {
+    let mut registry = BlockRegistry::new();
+    registry.register(BlockDefinition {
+        id: BlockId(1),
+        name: "book:grass_block".to_owned(),
+        atlas_tile: AtlasTile { x: 0, y: 0 },
+        solid: true,
+        opaque: true,
+    });
+
+    let mut section = ChunkSection::new();
+    for z in 0..SECTION_EDGE {
+        for x in 0..SECTION_EDGE {
+            section.set(x, 0, z, BlockId(1));
+        }
+    }
+
+    let mesh = mesh_section(&section, &registry, 16, 16);
+    mesh.vertices
+        .into_iter()
+        .map(|vertex| Vertex {
+            position: vertex.position,
+            uv: vertex.uv,
+        })
+        .collect()
 }
