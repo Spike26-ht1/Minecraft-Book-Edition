@@ -2,9 +2,19 @@
 
 ## Initial backend: OpenGL
 
-The 26.60 desktop prototype uses Glium over Glutin to create an OpenGL context, compile a shader program, draw a rotating cube, and present frames.
+The 26.60 test client targets desktop x86_64 (64-bit) on Windows and Linux. The OpenGL backend uses Glium over Glutin to create a context and draw chunk-mesh test geometry.
 
-This cube is a graphics smoke test. It is not the voxel-world renderer.
+The current terrain is generated test data, not a loaded world.
+
+## F3 debug overlay
+
+Press F3 to show or hide the in-game debug overlay. The initial panel reports:
+- FPS, calculated from rendered frames.
+- Frame time in milliseconds.
+- Active renderer and graphics API.
+- Chunk, block, and vertex counters.
+
+Chunk and block counts are marked as test values until a real world/chunk manager is connected. The overlay uses a compact built-in bitmap font so the initial debug HUD does not require an external font asset.
 
 ## Backend-neutral boundary
 
@@ -27,9 +37,10 @@ Sodium is a Java Edition renderer optimization mod, not a Vulkan-to-OpenGL trans
 
 ## Next renderer tasks
 
-1. GPU upload for book-meshing output.
-2. Camera matrices and view controls.
-3. Bedrock atlas image decoding and texture upload.
+1. Camera matrices and view controls.
+2. Bedrock atlas image decoding and texture upload.
+3. Replace test terrain with loaded/generated world chunks.
 4. Chunk draw batching and frustum culling.
-5. Transparent render layers and depth sorting.
-6. Profiling before adding advanced optimizations.
+5. Accurate world, chunk, entity, and memory values in the F3 panel.
+6. Transparent render layers and depth sorting.
+7. Profiling before adding advanced optimizations.

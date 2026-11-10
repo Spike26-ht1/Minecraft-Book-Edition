@@ -8,27 +8,34 @@ on:
 
 jobs:
   test:
-    name: Test (${{ matrix.os }})
+    name: Test (${{ matrix.os }}, x86_64)
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
+          targets: ${{ matrix.target }}
           components: rustfmt
       - name: Install Linux graphics dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libx11-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev
+      - name: Verify 64-bit target
+        run: rustc --print cfg --target ${{ matrix.target }}
       - name: Format Rust sources
         run: cargo fmt --all
       - name: Check formatting
         run: cargo fmt --all -- --check
-      - name: Run tests
-        run: cargo test --workspace
-      - name: Build client
-        run: cargo build -p book-client
+      - name: Run tests (x86_64)
+        run: cargo test --workspace --target ${{ matrix.target }}
+      - name: Build 26.60 client (x86_64)
+        run: cargo build -p book-client --target ${{ matrix.target }} --release
