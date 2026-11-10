@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/book-core",
+    "crates/book-world",
+    "crates/book-client",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Minecraft Book Edition contributors"]
+repository = "https://github.com/Spike26-ht1/Minecraft-Book-Edition"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
