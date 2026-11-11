@@ -1,11 +1,13 @@
-#[cfg(not(all(target_arch = "x86_64", target_pointer_width = "64")))]
-compile_error!("Minecraft Book Edition 26.60 test client currently supports x86_64 64-bit targets only.");
-
+#[cfg(not(target_os = "android"))]
 use book_renderer_api::{ClearColor, RendererBackend, RenderFrame};
+#[cfg(not(target_os = "android"))]
 use book_renderer_opengl::OpenGlRenderer;
+#[cfg(not(target_os = "android"))]
 use glium::winit::event::{ElementState, Event, WindowEvent};
+#[cfg(not(target_os = "android"))]
 use glium::winit::keyboard::{KeyCode, PhysicalKey};
 
+#[cfg(not(target_os = "android"))]
 fn main() {
     let event_loop = glium::winit::event_loop::EventLoopBuilder::new()
         .build()
@@ -19,7 +21,7 @@ fn main() {
 
     let info = renderer.info();
     println!("{} — {:?} ({})", info.name, info.api, info.api_version);
-    println!("Target: x86_64 (64-bit)");
+    println!("Target: desktop 64-bit");
     println!("Press F3 to toggle the debug overlay.");
 
     let frame = RenderFrame { clear_color: ClearColor::SKY };
