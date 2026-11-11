@@ -28,7 +28,7 @@ Desktop builds remain useful as development and CI checks, but they are not the 
 ## Android debug controls
 
 - F3 on a connected physical keyboard toggles the debug overlay.
-- A touch control is being added for devices without a keyboard.
+- The on-screen DBG button in the upper-right corner toggles the overlay by touch.
 - FPS and frame time are measured from rendered frames.
 
 ## Build checks
