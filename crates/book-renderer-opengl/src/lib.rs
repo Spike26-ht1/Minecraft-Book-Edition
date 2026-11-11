@@ -229,8 +229,9 @@ impl OpenGlRenderer {
         ).map_err(|error| RendererError::new(format!("Debug overlay draw: {error}")))
     }
 
+    #[cfg(target_os = "android")]
     fn draw_debug_button(&self, target: &mut glium::Frame) -> Result<(), RendererError> {
-        let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
+        let (screen_width, _screen_height) = self.display.get_framebuffer_dimensions();
         let x = screen_width.saturating_sub(88) as f32;
         let mut vertices = Vec::new();
         push_rect(&mut vertices, x, 12.0, 76.0, 40.0, [0.015, 0.02, 0.025, 0.82]);
@@ -277,6 +278,7 @@ impl RendererBackend for OpenGlRenderer {
             &parameters,
         ).map_err(|error| RendererError::new(format!("OpenGL chunk draw: {error}")))?;
         if self.debug_visible { self.draw_debug_overlay(&mut target)?; }
+        #[cfg(target_os = "android")]
         self.draw_debug_button(&mut target)?;
         target.finish().map_err(|error| RendererError::new(format!("OpenGL present: {error}")))
     }
