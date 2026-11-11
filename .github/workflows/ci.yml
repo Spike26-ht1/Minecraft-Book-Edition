@@ -39,3 +39,30 @@ jobs:
         run: cargo test --workspace --target ${{ matrix.target }}
       - name: Build 26.60 client (x86_64)
         run: cargo build -p book-client --target ${{ matrix.target }} --release
+
+  android-arm64:
+    name: Android ARM64 APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: android-actions/setup-android@v3
+      - name: Install Android NDK
+        run: |
+          sdkmanager "ndk;27.2.12479018"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Install cargo-apk
+        run: cargo install cargo-apk --locked
+      - name: Check Android ARM64 workspace
+        run: cargo check --workspace --target aarch64-linux-android
+      - name: Build Android ARM64 APK
+        run: cargo apk build -p book-client --release --target aarch64-linux-android
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: minecraft-book-edition-26.60-android-arm64
+          path: target/**/*.apk
+          if-no-files-found: error
