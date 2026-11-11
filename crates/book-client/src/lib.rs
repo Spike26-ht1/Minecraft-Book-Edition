@@ -1,3 +1,5 @@
+#![cfg(target_os = "android")]
+
 use book_renderer_api::{ClearColor, RendererBackend, RenderFrame};
 use book_renderer_opengl::OpenGlRenderer;
 use glium::winit::event::{ElementState, Event, TouchPhase, WindowEvent};
