@@ -1,14 +1,20 @@
 # Renderer design
 
-## Initial backend: OpenGL
+## First test-build platform: Android ARM64
 
-The 26.60 test client targets desktop x86_64 (64-bit) on Windows and Linux. The OpenGL backend uses Glium over Glutin to create a context and draw chunk-mesh test geometry.
+The first public test build targets Android 8.0 (API 26) and newer on 64-bit ARM devices (aarch64-linux-android). The package format is APK.
+
+The initial graphics backend is OpenGL ES. The renderer remains behind the backend-neutral book-renderer-api interface so a separate Vulkan backend can be introduced later without translating Vulkan commands into OpenGL.
+
+## OpenGL renderer
+
+The current renderer uses Glium over Glutin/Winit to create the graphics context and draw chunk-mesh test geometry. Android window and graphics-surface creation must follow the Winit lifecycle: create the surface after Resumed and release it on Suspended.
 
 The current terrain is generated test data, not a loaded world.
 
 ## F3 debug overlay
 
-Press F3 to show or hide the in-game debug overlay. The initial panel reports:
+The debug panel reports:
 - FPS, calculated from rendered frames.
 - Frame time in milliseconds.
 - Active renderer and graphics API.
