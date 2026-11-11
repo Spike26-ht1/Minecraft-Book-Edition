@@ -227,6 +227,26 @@ impl OpenGlRenderer {
             &uniform! { u_screen: [screen_width as f32, screen_height as f32] },
             &params,
         ).map_err(|error| RendererError::new(format!("Debug overlay draw: {error}")))
+
+    fn draw_debug_button(&self, target: &mut glium::Frame) -> Result<(), RendererError> {
+        let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
+        let x = screen_width.saturating_sub(88) as f32;
+        let mut vertices = Vec::new();
+        push_rect(&mut vertices, x, 12.0, 76.0, 40.0, [0.015, 0.02, 0.025, 0.82]);
+        for (index, character) in "DBG".chars().enumerate() {
+            draw_character(&mut vertices, character, x + 12.0 + index as f32 * 16.0, 23.0, 2.0);
+        }
+        let buffer = VertexBuffer::new(&self.display, &vertices)
+            .map_err(|error| RendererError::new(format!("Debug button buffer: {error}")))?;
+        let params = DrawParameters { blend: Blend::alpha_blending(), ..DrawParameters::default() };
+        target.draw(
+            &buffer,
+            NoIndices(glium::index::PrimitiveType::TrianglesList),
+            &self.debug_program,
+            &uniform! { u_screen: [screen_width as f32, screen_height as f32] },
+            &params,
+        ).map_err(|error| RendererError::new(format!("Debug button draw: {error}")))
+    }
     }
 }
 
@@ -257,6 +277,7 @@ impl RendererBackend for OpenGlRenderer {
             &parameters,
         ).map_err(|error| RendererError::new(format!("OpenGL chunk draw: {error}")))?;
         if self.debug_visible { self.draw_debug_overlay(&mut target)?; }
+        self.draw_debug_button(&mut target)?;
         target.finish().map_err(|error| RendererError::new(format!("OpenGL present: {error}")))
     }
 }
