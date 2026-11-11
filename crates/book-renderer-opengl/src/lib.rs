@@ -2,7 +2,24 @@ use book_core::{AtlasTile, BlockDefinition, BlockId, BlockRegistry};
 use book_meshing::mesh_section;
 use book_renderer_api::{GraphicsApi, RendererBackend, RendererError, RendererInfo, RenderFrame};
 use book_world::{ChunkSection, SECTION_EDGE};
+#[cfg(not(target_os = "android"))]
 use glium::backend::glutin::SimpleWindowBuilder;
+#[cfg(target_os = "android")]
+use glutin::config::{Api, ConfigTemplateBuilder};
+#[cfg(target_os = "android")]
+use glutin::context::{ContextApi, ContextAttributesBuilder, Version};
+#[cfg(target_os = "android")]
+use glutin::display::{GetGlDisplay, GlDisplay};
+#[cfg(target_os = "android")]
+use glutin::prelude::NotCurrentGlContext;
+#[cfg(target_os = "android")]
+use glutin::surface::{SurfaceAttributesBuilder, GlSurface};
+#[cfg(target_os = "android")]
+use glutin_winit::DisplayBuilder;
+#[cfg(target_os = "android")]
+use raw_window_handle::HasWindowHandle;
+#[cfg(target_os = "android")]
+use std::num::NonZeroU32;
 use glium::index::NoIndices;
 use glium::uniform;
 use glium::{implement_vertex, Blend, Depth, DepthTest, DrawParameters, Program, Surface, VertexBuffer};
@@ -151,10 +168,13 @@ impl OpenGlRenderer {
         width: u32,
         height: u32,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
+        #[cfg(not(target_os = "android"))]
         let (window, display) = SimpleWindowBuilder::new()
             .with_title(title)
             .with_inner_size(width, height)
             .build(event_loop);
+        #[cfg(target_os = "android")]
+        let (window, display) = create_android_display(event_loop, title, width, height)?;
         let chunk_vertices = VertexBuffer::new(&display, &demo_chunk_vertices())
             .map_err(|error| RendererError::new(format!("Chunk vertex buffer: {error}")))?;
         let program = Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None)
@@ -332,6 +352,72 @@ fn glyph(character: char) -> [u8; 7] {
         '/' => [1,2,2,4,8,8,16], '(' => [2,4,8,8,8,4,2],
         ')' => [8,4,2,2,2,4,8], _ => [0;7],
     }
+}
+
+
+#[cfg(target_os = "android")]
+#[allow(unsafe_code)]
+fn create_android_display(
+    event_loop: &impl glium::backend::glutin::simple_window_builder::GliumEventLoop,
+    title: &str,
+    width: u32,
+    height: u32,
+) -> Result<
+    (
+        glium::winit::window::Window,
+        glium::backend::glutin::Display<WindowSurface>,
+    ),
+    RendererError,
+> {
+    use glium::winit::dpi::PhysicalSize;
+    use glium::winit::window::Window;
+
+    let attributes = Window::default_attributes()
+        .with_title(title)
+        .with_inner_size(PhysicalSize::new(width, height));
+    let display_builder = DisplayBuilder::new().with_window_attributes(Some(attributes));
+    let template = ConfigTemplateBuilder::new()
+        .with_api(Api::GLES3)
+        .with_depth_size(24);
+    let (window, config) = display_builder
+        .build(event_loop, template, |mut configs| {
+            configs.next().expect("no OpenGL ES 3 configuration found")
+        })
+        .map_err(|error| RendererError::new(format!("Android EGL configuration: {error}")))?;
+    let window = window.ok_or_else(|| RendererError::new("Android window was not created"))?;
+    let raw_window = window
+        .window_handle()
+        .map_err(|error| RendererError::new(format!("Android window handle: {error}")))?
+        .as_raw();
+    let context_attributes = ContextAttributesBuilder::new()
+        .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
+        .build(Some(raw_window));
+    let not_current = unsafe {
+        config
+            .display()
+            .create_context(&config, &context_attributes)
+    }
+    .map_err(|error| RendererError::new(format!("OpenGL ES 3 context: {error}")))?;
+
+    let size = window.inner_size();
+    let surface_attributes = SurfaceAttributesBuilder::<WindowSurface>::new().build(
+        raw_window,
+        NonZeroU32::new(size.width.max(1)).expect("non-zero surface width"),
+        NonZeroU32::new(size.height.max(1)).expect("non-zero surface height"),
+    );
+    let surface = unsafe {
+        config
+            .display()
+            .create_window_surface(&config, &surface_attributes)
+    }
+    .map_err(|error| RendererError::new(format!("Android EGL surface: {error}")))?;
+    let current = not_current
+        .make_current(&surface)
+        .map_err(|error| RendererError::new(format!("Make OpenGL ES current: {error}")))?;
+    let display = glium::backend::glutin::Display::from_context_surface(current, surface)
+        .map_err(|error| RendererError::new(format!("Glium display: {error}")))?;
+
+    Ok((window, display))
 }
 
 fn demo_chunk_vertices() -> Vec<Vertex> {
