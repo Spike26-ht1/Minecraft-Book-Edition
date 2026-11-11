@@ -227,6 +227,7 @@ impl OpenGlRenderer {
             &uniform! { u_screen: [screen_width as f32, screen_height as f32] },
             &params,
         ).map_err(|error| RendererError::new(format!("Debug overlay draw: {error}")))
+    }
 
     fn draw_debug_button(&self, target: &mut glium::Frame) -> Result<(), RendererError> {
         let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
@@ -246,7 +247,6 @@ impl OpenGlRenderer {
             &uniform! { u_screen: [screen_width as f32, screen_height as f32] },
             &params,
         ).map_err(|error| RendererError::new(format!("Debug button draw: {error}")))
-    }
     }
 }
 
