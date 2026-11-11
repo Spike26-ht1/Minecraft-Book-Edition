@@ -47,3 +47,6 @@ fn main() {
         _ => {}
     });
 }
+
+#[cfg(target_os = "android")]
+fn main() {}
