@@ -7,7 +7,8 @@ use glium::winit::keyboard::{KeyCode, PhysicalKey};
 use glium::winit::platform::android::activity::AndroidApp;
 use glium::winit::platform::android::EventLoopBuilderExtAndroid;
 
-#[no_mangle]
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
     let mut builder = glium::winit::event_loop::EventLoopBuilder::new();
     builder.with_android_app(app);
