@@ -19,6 +19,8 @@ winit = { version = "0.30", features = ["android-native-activity"] }
 package = "com.spike26.minecraftbookedition"
 label = "Minecraft Book Edition 26.60"
 build_targets = ["aarch64-linux-android"]
+
+[package.metadata.android.sdk]
 min_sdk_version = 26
 target_sdk_version = 35
 
