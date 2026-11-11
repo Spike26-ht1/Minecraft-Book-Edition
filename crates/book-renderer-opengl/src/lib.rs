@@ -9,6 +9,65 @@ use glium::{implement_vertex, Blend, Depth, DepthTest, DrawParameters, Program, 
 use glutin::surface::WindowSurface;
 use std::time::Instant;
 
+
+#[cfg(target_os = "android")]
+const VERTEX_SHADER: &str = r#"
+#version 300 es
+precision highp float;
+in vec3 position;
+in vec2 uv;
+out vec2 v_uv;
+uniform float u_time;
+void main() {
+    vec3 centered = position - vec3(8.0, 0.0, 8.0);
+    float angle = 0.42 + sin(u_time * 0.12) * 0.08;
+    float c = cos(angle);
+    float s = sin(angle);
+    float rotated_x = centered.x * c - centered.z * s;
+    float rotated_z = centered.x * s + centered.z * c;
+    gl_Position = vec4(rotated_x * 0.075, centered.y * 0.13 - rotated_z * 0.045,
+                       0.5 + rotated_z * 0.001 - centered.y * 0.001, 1.0);
+    v_uv = uv;
+}
+"#;
+
+#[cfg(target_os = "android")]
+const FRAGMENT_SHADER: &str = r#"
+#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 out_color;
+void main() {
+    float texture_hint = 0.94 + fract(v_uv.x * 16.0) * 0.06;
+    out_color = vec4(vec3(0.30, 0.58, 0.25) * texture_hint, 1.0);
+}
+"#;
+
+#[cfg(target_os = "android")]
+const DEBUG_VERTEX_SHADER: &str = r#"
+#version 300 es
+precision highp float;
+in vec2 position;
+in vec4 color;
+out vec4 v_color;
+uniform vec2 u_screen;
+void main() {
+    vec2 clip = vec2(position.x / u_screen.x * 2.0 - 1.0,
+                     1.0 - position.y / u_screen.y * 2.0);
+    gl_Position = vec4(clip, 0.0, 1.0);
+    v_color = color;
+}
+"#;
+
+#[cfg(target_os = "android")]
+const DEBUG_FRAGMENT_SHADER: &str = r#"
+#version 300 es
+precision highp float;
+in vec4 v_color;
+out vec4 out_color;
+void main() { out_color = v_color; }
+"#;
+
 #[derive(Clone, Copy)]
 struct Vertex { position: [f32; 3], uv: [f32; 2] }
 implement_vertex!(Vertex, position, uv);
@@ -17,6 +76,7 @@ implement_vertex!(Vertex, position, uv);
 struct DebugVertex { position: [f32; 2], color: [f32; 4] }
 implement_vertex!(DebugVertex, position, color);
 
+#[cfg(not(target_os = "android"))]
 const VERTEX_SHADER: &str = r#"
 #version 140
 in vec3 position;
@@ -36,6 +96,7 @@ void main() {
 }
 "#;
 
+#[cfg(not(target_os = "android"))]
 const FRAGMENT_SHADER: &str = r#"
 #version 140
 in vec2 v_uv;
@@ -46,6 +107,7 @@ void main() {
 }
 "#;
 
+#[cfg(not(target_os = "android"))]
 const DEBUG_VERTEX_SHADER: &str = r#"
 #version 140
 in vec2 position;
@@ -60,6 +122,7 @@ void main() {
 }
 "#;
 
+#[cfg(not(target_os = "android"))]
 const DEBUG_FRAGMENT_SHADER: &str = r#"
 #version 140
 in vec4 v_color;
@@ -83,7 +146,7 @@ pub struct OpenGlRenderer {
 
 impl OpenGlRenderer {
     pub fn new(
-        event_loop: &glium::winit::event_loop::EventLoop<()>,
+        event_loop: &impl glium::backend::glutin::simple_window_builder::GliumEventLoop,
         title: &str,
         width: u32,
         height: u32,
