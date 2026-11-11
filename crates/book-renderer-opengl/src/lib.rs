@@ -13,7 +13,7 @@ use glutin::display::{GetGlDisplay, GlDisplay};
 #[cfg(target_os = "android")]
 use glutin::prelude::NotCurrentGlContext;
 #[cfg(target_os = "android")]
-use glutin::surface::{SurfaceAttributesBuilder, GlSurface};
+use glutin::surface::SurfaceAttributesBuilder;
 #[cfg(target_os = "android")]
 use glutin_winit::DisplayBuilder;
 #[cfg(target_os = "android")]
@@ -162,19 +162,35 @@ pub struct OpenGlRenderer {
 }
 
 impl OpenGlRenderer {
+    #[cfg(not(target_os = "android"))]
     pub fn new(
-        event_loop: &impl glium::backend::glutin::simple_window_builder::GliumEventLoop,
+        event_loop: &glium::winit::event_loop::EventLoop<()>,
         title: &str,
         width: u32,
         height: u32,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
-        #[cfg(not(target_os = "android"))]
         let (window, display) = SimpleWindowBuilder::new()
             .with_title(title)
             .with_inner_size(width, height)
             .build(event_loop);
-        #[cfg(target_os = "android")]
+        Self::from_display(window, display)
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn new(
+        event_loop: &glium::winit::event_loop::ActiveEventLoop,
+        title: &str,
+        width: u32,
+        height: u32,
+    ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         let (window, display) = create_android_display(event_loop, title, width, height)?;
+        Self::from_display(window, display)
+    }
+
+    fn from_display(
+        window: glium::winit::window::Window,
+        display: glium::backend::glutin::Display<WindowSurface>,
+    ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         let chunk_vertices = VertexBuffer::new(&display, &demo_chunk_vertices())
             .map_err(|error| RendererError::new(format!("Chunk vertex buffer: {error}")))?;
         let program = Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None)
@@ -358,7 +374,7 @@ fn glyph(character: char) -> [u8; 7] {
 #[cfg(target_os = "android")]
 #[allow(unsafe_code)]
 fn create_android_display(
-    event_loop: &impl glium::backend::glutin::simple_window_builder::GliumEventLoop,
+    event_loop: &glium::winit::event_loop::ActiveEventLoop,
     title: &str,
     width: u32,
     height: u32,
