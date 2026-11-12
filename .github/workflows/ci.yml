@@ -1,5 +1,5 @@
 name: Rust CI
-run-name: Minecraft Book Edition — Pre-Alpha 1.1.0
+run-name: Minecraft Book Edition — Pre-Alpha 1.2.0
 
 on:
   push:
@@ -81,11 +81,11 @@ jobs:
           unzip -l "$APK" | grep 'lib/arm64-v8a/libmain.so'
           unzip -l "$APK" | grep 'ic_launcher.png'
           mkdir -p dist
-          cp "$APK" dist/Minecraft_Book_Edition_PreAlpha_1.1.0_android_arm64.apk
-          sha256sum dist/Minecraft_Book_Edition_PreAlpha_1.1.0_android_arm64.apk
+          cp "$APK" dist/Minecraft_Book_Edition_PreAlpha_1.2.0_android_arm64.apk
+          sha256sum dist/Minecraft_Book_Edition_PreAlpha_1.2.0_android_arm64.apk
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: minecraft-book-edition-prealpha-1.1.0-android-arm64
-          path: dist/Minecraft_Book_Edition_PreAlpha_1.1.0_android_arm64.apk
+          name: minecraft-book-edition-prealpha-1.2.0-android-arm64
+          path: dist/Minecraft_Book_Edition_PreAlpha_1.2.0_android_arm64.apk
           if-no-files-found: error
