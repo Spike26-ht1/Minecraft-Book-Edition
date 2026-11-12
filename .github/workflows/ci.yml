@@ -55,13 +55,23 @@ jobs:
           echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
-          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+          installed=0
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"; then
+              installed=1
+              break
+            fi
+            echo "Android SDK download failed (attempt $attempt/3); retrying..."
+            rm -rf "$SDK_ROOT/ndk/27.2.12479018"
+            sleep 5
+          done
+          test "$installed" -eq 1
           echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
           echo "NDK_HOME=$SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
       - name: Install cargo-apk
         run: cargo install cargo-apk --locked
       - name: Build Android ARM64 APK
-        run: cargo apk build -p book-client --debug --target aarch64-linux-android
+        run: cargo apk build -p book-client --target aarch64-linux-android
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
