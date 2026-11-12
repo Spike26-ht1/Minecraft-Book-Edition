@@ -1,8 +1,8 @@
-# Minecraft Book Edition 26.60
+# Minecraft Book Edition 26.60 — First Pre-Alpha
 
 An independent, open-source voxel sandbox project written in Rust.
 
-## First test-build target
+## First pre-alpha target
 
 The first public test build targets **Android ARM64 (arm64-v8a)**:
 - Android 8.0 or newer (API 26).
@@ -35,9 +35,9 @@ Desktop builds remain useful as development and CI checks, but they are not the 
 
 Desktop: cargo test --workspace and cargo fmt --all -- --check.
 
-Android ARM64: cargo apk build --release --target aarch64-linux-android.
+Android ARM64 debug APK: `cargo apk build -p book-client --target aarch64-linux-android`.
 
-The Android package uses minimum SDK 26. The APK still requires runtime testing on a physical Android device.
+The CI APK is a debug-signed test package, not a store-ready release. The Android package uses minimum SDK 26. Installation and runtime behavior still require testing on a physical Android 8+ ARM64 device.
 
 ## Compatibility policy
 
