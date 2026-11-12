@@ -14,6 +14,7 @@ glium = "0.36"
 glutin = "0.32"
 glutin-winit = "0.5"
 raw-window-handle = "0.6"
+log = "0.4"
 
 [lints]
 workspace = true

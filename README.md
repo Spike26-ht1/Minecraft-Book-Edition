@@ -1,4 +1,4 @@
-# Minecraft Book Edition 26.60 — First Pre-Alpha
+# Minecraft Book Edition — Pre-Alpha 1.1.0
 
 An independent, open-source voxel sandbox project written in Rust.
 
@@ -35,9 +35,9 @@ Desktop builds remain useful as development and CI checks, but they are not the 
 
 Desktop: cargo test --workspace and cargo fmt --all -- --check.
 
-Android ARM64 debug APK: `cargo apk build -p book-client --lib --target aarch64-linux-android`.
+Android ARM64 debug APK (Pre-Alpha 1.1.0): `cargo apk build -p book-client --lib --target aarch64-linux-android`.
 
-The CI APK is a debug-signed test package, not a store-ready release. The Android package uses minimum SDK 26. Installation and runtime behavior still require testing on a physical Android 8+ ARM64 device.
+Pre-Alpha 1.1.0 adds Android startup diagnostics through Logcat, more detailed EGL/OpenGL initialization checkpoints, a less restrictive 16-bit depth-buffer request for mobile EGL devices, and the project launcher icon. The CI APK is a debug-signed test package, not a store-ready release. The Android package uses minimum SDK 26. Compilation and APK structure are checked by CI, but runtime behavior still requires testing on a physical Android 8+ ARM64 device.
 
 ## Compatibility policy
 

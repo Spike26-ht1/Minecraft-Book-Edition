@@ -15,14 +15,24 @@ book-renderer-opengl = { path = "../book-renderer-opengl" }
 glium = "0.36"
 winit = { version = "0.30", features = ["android-native-activity"] }
 
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.15"
+log = "0.4"
+
 [package.metadata.android]
 package = "com.spike26.minecraftbookedition"
-label = "Minecraft Book Edition 26.60"
+apk_name = "minecraft-book-edition-prealpha-1.1.0"
 build_targets = ["aarch64-linux-android"]
+resources = "res"
 
 [package.metadata.android.sdk]
 min_sdk_version = 26
 target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "Minecraft Book Edition Pre-Alpha 1.1.0"
+icon = "@mipmap/ic_launcher"
+debuggable = true
 
 [lints]
 workspace = true

@@ -180,10 +180,10 @@ impl OpenGlRenderer {
     pub fn new(
         event_loop: &glium::winit::event_loop::ActiveEventLoop,
         title: &str,
-        width: u32,
-        height: u32,
+        _width: u32,
+        _height: u32,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
-        let (window, display) = create_android_display(event_loop, title, width, height)?;
+        let (window, display) = create_android_display(event_loop, title)?;
         Self::from_display(window, display)
     }
 
@@ -376,8 +376,6 @@ fn glyph(character: char) -> [u8; 7] {
 fn create_android_display(
     event_loop: &glium::winit::event_loop::ActiveEventLoop,
     title: &str,
-    width: u32,
-    height: u32,
 ) -> Result<
     (
         glium::winit::window::Window,
@@ -385,26 +383,30 @@ fn create_android_display(
     ),
     RendererError,
 > {
-    use glium::winit::dpi::PhysicalSize;
     use glium::winit::window::Window;
 
-    let attributes = Window::default_attributes()
-        .with_title(title)
-        .with_inner_size(PhysicalSize::new(width, height));
+    log::info!("Preparing Android native window and EGL display");
+    let attributes = Window::default_attributes().with_title(title);
     let display_builder = DisplayBuilder::new().with_window_attributes(Some(attributes));
+    // 16-bit depth buffers are broadly supported by mobile EGL implementations.
     let template = ConfigTemplateBuilder::new()
         .with_api(Api::GLES3)
-        .with_depth_size(24);
+        .with_depth_size(16);
     let (window, config) = display_builder
         .build(event_loop, template, |mut configs| {
-            configs.next().expect("no OpenGL ES 3 configuration found")
+            let selected = configs.next();
+            log::info!("Android EGL GLES3 configuration available: {}", selected.is_some());
+            selected.expect("no OpenGL ES 3 EGL configuration found")
         })
         .map_err(|error| RendererError::new(format!("Android EGL configuration: {error}")))?;
-    let window = window.ok_or_else(|| RendererError::new("Android window was not created"))?;
+    log::info!("Android EGL configuration created");
+    let window = window.ok_or_else(|| RendererError::new("Android native window was not created"))?;
+    log::info!("Android native window created");
     let raw_window = window
         .window_handle()
         .map_err(|error| RendererError::new(format!("Android window handle: {error}")))?
         .as_raw();
+    log::info!("Requesting an OpenGL ES 3.0 context");
     let context_attributes = ContextAttributesBuilder::new()
         .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
         .build(Some(raw_window));
@@ -427,11 +429,14 @@ fn create_android_display(
             .create_window_surface(&config, &surface_attributes)
     }
     .map_err(|error| RendererError::new(format!("Android EGL surface: {error}")))?;
+    log::info!("Android EGL window surface created");
     let current = not_current
         .make_current(&surface)
         .map_err(|error| RendererError::new(format!("Make OpenGL ES current: {error}")))?;
+    log::info!("OpenGL ES context made current");
     let display = glium::backend::glutin::Display::from_context_surface(current, surface)
         .map_err(|error| RendererError::new(format!("Glium display: {error}")))?;
+    log::info!("Glium display initialized");
 
     Ok((window, display))
 }
