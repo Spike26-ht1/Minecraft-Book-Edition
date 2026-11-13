@@ -1,4 +1,4 @@
-use book_core::BlockId;
+use book_core::{BlockId, BlockState};
 
 pub const SECTION_EDGE: usize = 16;
 pub const SECTION_VOLUME: usize = SECTION_EDGE * SECTION_EDGE * SECTION_EDGE;
@@ -13,13 +13,13 @@ pub struct ChunkPos {
 /// A 16 × 16 × 16 section of blocks.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChunkSection {
-    blocks: [BlockId; SECTION_VOLUME],
+    blocks: [BlockState; SECTION_VOLUME],
 }
 
 impl Default for ChunkSection {
     fn default() -> Self {
         Self {
-            blocks: [BlockId::AIR; SECTION_VOLUME],
+            blocks: [BlockState::AIR; SECTION_VOLUME],
         }
     }
 }
@@ -38,21 +38,28 @@ impl ChunkSection {
         Some(x + SECTION_EDGE * (z + SECTION_EDGE * y))
     }
 
-    pub fn get(&self, x: usize, y: usize, z: usize) -> Option<BlockId> {
+    pub fn get_state(&self, x: usize, y: usize, z: usize) -> Option<BlockState> {
         let index = Self::index(x, y, z)?;
         Some(self.blocks[index])
     }
 
-    pub fn set(&mut self, x: usize, y: usize, z: usize, block: BlockId) -> bool {
+    pub fn set_state(&mut self, x: usize, y: usize, z: usize, state: BlockState) -> bool {
         let Some(index) = Self::index(x, y, z) else {
             return false;
         };
-
-        self.blocks[index] = block;
+        self.blocks[index] = state;
         true
     }
 
-    pub fn blocks(&self) -> &[BlockId; SECTION_VOLUME] {
+    pub fn get(&self, x: usize, y: usize, z: usize) -> Option<BlockId> {
+        self.get_state(x, y, z).map(|state| state.block)
+    }
+
+    pub fn set(&mut self, x: usize, y: usize, z: usize, block: BlockId) -> bool {
+        self.set_state(x, y, z, BlockState::new(block, 0))
+    }
+
+    pub fn blocks(&self) -> &[BlockState; SECTION_VOLUME] {
         &self.blocks
     }
 }
@@ -87,15 +94,37 @@ impl ChunkColumn {
         self.sections.len()
     }
 
-    /// Reads a block using local X/Z coordinates and absolute world Y.
-    pub fn get_block(&self, local_x: usize, world_y: i32, local_z: usize) -> Option<BlockId> {
+    /// Reads a block state using local X/Z coordinates and absolute world Y.
+    pub fn get_state(&self, local_x: usize, world_y: i32, local_z: usize) -> Option<BlockState> {
         if local_x >= SECTION_EDGE || local_z >= SECTION_EDGE {
             return None;
         }
 
         let section_y = world_y.div_euclid(SECTION_EDGE as i32);
         let local_y = world_y.rem_euclid(SECTION_EDGE as i32) as usize;
-        self.sections.get(&section_y)?.get(local_x, local_y, local_z)
+        self.sections.get(&section_y)?.get_state(local_x, local_y, local_z)
+    }
+
+    /// Reads only the block type at an absolute world Y coordinate.
+    pub fn get_block(&self, local_x: usize, world_y: i32, local_z: usize) -> Option<BlockId> {
+        self.get_state(local_x, world_y, local_z).map(|state| state.block)
+    }
+
+    /// Writes a block state using local X/Z coordinates and absolute world Y.
+    pub fn set_state(
+        &mut self,
+        local_x: usize,
+        world_y: i32,
+        local_z: usize,
+        state: BlockState,
+    ) -> bool {
+        if local_x >= SECTION_EDGE || local_z >= SECTION_EDGE {
+            return false;
+        }
+
+        let section_y = world_y.div_euclid(SECTION_EDGE as i32);
+        let local_y = world_y.rem_euclid(SECTION_EDGE as i32) as usize;
+        self.section_mut(section_y).set_state(local_x, local_y, local_z, state)
     }
 
     /// Writes a block using local X/Z coordinates and absolute world Y.
@@ -107,13 +136,7 @@ impl ChunkColumn {
         local_z: usize,
         block: BlockId,
     ) -> bool {
-        if local_x >= SECTION_EDGE || local_z >= SECTION_EDGE {
-            return false;
-        }
-
-        let section_y = world_y.div_euclid(SECTION_EDGE as i32);
-        let local_y = world_y.rem_euclid(SECTION_EDGE as i32) as usize;
-        self.section_mut(section_y).set(local_x, local_y, local_z, block)
+        self.set_state(local_x, world_y, local_z, BlockState::new(block, 0))
     }
 }
 
@@ -153,7 +176,7 @@ mod tests {
     fn new_section_is_filled_with_air() {
         let section = ChunkSection::new();
 
-        assert!(section.blocks().iter().all(|block| *block == BlockId::AIR));
+        assert!(section.blocks().iter().all(|state| *state == BlockState::AIR));
     }
 
     #[test]
@@ -224,11 +247,31 @@ impl ChunkManager {
         self.columns.contains_key(&position)
     }
 
-    /// Reads an absolute world block position.
+    /// Reads an absolute world block state.
     /// Returns None if its chunk or vertical section is not loaded.
-    pub fn get_block(&self, world_x: i32, world_y: i32, world_z: i32) -> Option<BlockId> {
+    pub fn get_state(&self, world_x: i32, world_y: i32, world_z: i32) -> Option<BlockState> {
         let (position, local_x, local_z) = Self::locate(world_x, world_z);
-        self.columns.get(&position)?.get_block(local_x, world_y, local_z)
+        self.columns.get(&position)?.get_state(local_x, world_y, local_z)
+    }
+
+    /// Reads only the block type at an absolute world position.
+    pub fn get_block(&self, world_x: i32, world_y: i32, world_z: i32) -> Option<BlockId> {
+        self.get_state(world_x, world_y, world_z).map(|state| state.block)
+    }
+
+    /// Writes an absolute world block state.
+    pub fn set_state(
+        &mut self,
+        world_x: i32,
+        world_y: i32,
+        world_z: i32,
+        state: BlockState,
+    ) -> bool {
+        let (position, local_x, local_z) = Self::locate(world_x, world_z);
+        let Some(column) = self.columns.get_mut(&position) else {
+            return false;
+        };
+        column.set_state(local_x, world_y, local_z, state)
     }
 
     /// Writes an absolute world block position.
@@ -240,12 +283,7 @@ impl ChunkManager {
         world_z: i32,
         block: BlockId,
     ) -> bool {
-        let (position, local_x, local_z) = Self::locate(world_x, world_z);
-        let Some(column) = self.columns.get_mut(&position) else {
-            return false;
-        };
-
-        column.set_block(local_x, world_y, local_z, block)
+        self.set_state(world_x, world_y, world_z, BlockState::new(block, 0))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&ChunkPos, &ChunkColumn)> {
@@ -288,6 +326,16 @@ mod manager_tests {
         assert_eq!(manager.get_block(15, 4, 2), Some(BlockId(3)));
         assert_eq!(manager.get_block(16, 4, 2), Some(BlockId(4)));
         assert_eq!(manager.get_block(-1, 4, 2), Some(BlockId(5)));
+    }
+
+    #[test]
+    fn manager_preserves_block_state_across_chunk_boundaries() {
+        let mut manager = ChunkManager::new();
+        manager.insert_column(ChunkColumn::new(ChunkPos { x: 1, z: 0 }));
+        let state = BlockState::new(BlockId(7), 23);
+        assert!(manager.set_state(16, 5, 2, state));
+        assert_eq!(manager.get_state(16, 5, 2), Some(state));
+        assert_eq!(manager.get_block(16, 5, 2), Some(BlockId(7)));
     }
 
     #[test]
