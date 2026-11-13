@@ -1,6 +1,10 @@
 name: Rust CI
 run-name: Minecraft Book Edition — Pre-Alpha 1.2.0
 
+concurrency:
+  group: book-ci-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, "foundation/**"]
