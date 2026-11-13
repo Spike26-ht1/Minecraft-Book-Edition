@@ -35,7 +35,7 @@ impl BookingEngine {
             (1, "book:grass_block", AtlasTile { x: 0, y: 0 }),
             (2, "book:dirt", AtlasTile { x: 1, y: 0 }),
             (3, "book:stone", AtlasTile { x: 2, y: 0 }),
-            (4, "book:bedrock", AtlasTile { x: 3, y: 0 }),
+            (4, "book:bedrock", AtlasTile { x: 2, y: 0 }),
         ] {
             blocks.register(BlockDefinition {
                 id: BlockId(id), name: name.to_owned(), atlas_tile: tile,
@@ -93,13 +93,24 @@ impl BookingEngine {
         }
     }
 
-    /// Builds CPU meshes for all loaded section-zero chunks.
-    /// Loaded neighbors are used to cull hidden faces at chunk boundaries.
+    /// Builds CPU meshes for every loaded vertical section.
+    /// Neighbor sections are included so internal section faces are culled.
     pub fn build_loaded_world_meshes(&self) -> Vec<WorldSectionMesh> {
-        self.world.iter().filter_map(|(position, _)| {
-            mesh_chunk_section(&self.world, *position, 0, &self.blocks, 16, 16)
-                .map(|mesh| WorldSectionMesh { position: *position, section_y: 0, mesh })
-        }).collect()
+        let mut meshes = Vec::new();
+        for (position, column) in self.world.iter() {
+            for (section_y, _) in column.iter_sections() {
+                if let Some(mesh) = mesh_chunk_section(
+                    &self.world, *position, section_y, &self.blocks, 16, 16,
+                ) {
+                    meshes.push(WorldSectionMesh {
+                        position: *position,
+                        section_y,
+                        mesh,
+                    });
+                }
+            }
+        }
+        meshes
     }
 
     pub fn loaded_chunk_count(&self) -> usize { self.world.loaded_count() }
