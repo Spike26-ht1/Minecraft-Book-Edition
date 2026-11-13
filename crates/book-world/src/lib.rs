@@ -278,6 +278,7 @@ mod manager_tests {
     fn manager_reads_and_writes_across_chunk_boundaries() {
         let mut manager = ChunkManager::new();
         manager.insert_column(ChunkColumn::new(ChunkPos { x: 0, z: 0 }));
+        manager.insert_column(ChunkColumn::new(ChunkPos { x: 1, z: 0 }));
         manager.insert_column(ChunkColumn::new(ChunkPos { x: -1, z: 0 }));
 
         assert!(manager.set_block(15, 4, 2, BlockId(3)));
@@ -285,7 +286,7 @@ mod manager_tests {
         assert!(manager.set_block(-1, 4, 2, BlockId(5)));
 
         assert_eq!(manager.get_block(15, 4, 2), Some(BlockId(3)));
-        assert_eq!(manager.get_block(16, 4, 2), None);
+        assert_eq!(manager.get_block(16, 4, 2), Some(BlockId(4)));
         assert_eq!(manager.get_block(-1, 4, 2), Some(BlockId(5)));
     }
 
