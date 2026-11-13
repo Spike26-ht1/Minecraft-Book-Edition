@@ -1,7 +1,6 @@
-use book_core::{AtlasTile, BlockDefinition, BlockId, BlockRegistry};
-use book_meshing::mesh_chunk_section;
+use booking_engine::BookingEngine;
+use book_core::BlockId;
 use book_renderer_api::{GraphicsApi, RendererBackend, RendererError, RendererInfo, RenderFrame};
-use book_world::{ChunkColumn, ChunkManager, ChunkPos, SECTION_EDGE};
 #[cfg(not(target_os = "android"))]
 use glium::backend::glutin::SimpleWindowBuilder;
 #[cfg(target_os = "android")]
@@ -579,60 +578,18 @@ fn create_android_display(
 }
 
 fn sample_world_vertices() -> Vec<Vertex> {
-    // A small generated world is loaded into the same ChunkManager used by
-    // gameplay. The renderer meshes each section with its six loaded neighbors.
-    let mut registry = BlockRegistry::new();
-    for (id, name, tile) in [
-        (1, "book:grass_block", AtlasTile { x: 0, y: 0 }),
-        (2, "book:dirt", AtlasTile { x: 1, y: 0 }),
-        (3, "book:stone", AtlasTile { x: 2, y: 0 }),
-    ] {
-        registry.register(BlockDefinition {
-            id: BlockId(id), name: name.to_owned(), atlas_tile: tile,
-            solid: true, opaque: true,
-        });
-    }
-
-    let mut world = ChunkManager::new();
-    for chunk_z in 0..3 {
-        for chunk_x in 0..3 {
-            let position = ChunkPos { x: chunk_x, z: chunk_z };
-            let mut column = ChunkColumn::new(position);
-            let section = column.section_mut(0);
-
-            for local_z in 0..SECTION_EDGE {
-                for local_x in 0..SECTION_EDGE {
-                    let world_x = chunk_x * SECTION_EDGE as i32 + local_x as i32;
-                    let world_z = chunk_z * SECTION_EDGE as i32 + local_z as i32;
-                    let wave = ((world_x as f32 * 0.12).sin()
-                        + (world_z as f32 * 0.11).cos()) * 1.35;
-                    let distance = ((world_x as f32 - 24.0).powi(2)
-                        + (world_z as f32 - 24.0).powi(2)).sqrt();
-                    let ridge = distance * -0.045 + 1.8;
-                    let height = (3.0 + wave + ridge).round().clamp(1.0, 8.0) as usize;
-
-                    for y in 0..=height {
-                        let block = if y == height { BlockId(1) }
-                            else if y + 2 >= height { BlockId(2) }
-                            else { BlockId(3) };
-                        section.set(local_x, y, local_z, block);
-                    }
-                }
-            }
-            world.insert_column(column);
-        }
-    }
+    // The renderer consumes CPU meshes prepared by Booking. World generation,
+    // block registration and chunk-neighbor meshing stay outside the renderer.
+    let mut engine = BookingEngine::new();
+    engine.generate_prototype_terrain(1);
 
     let mut vertices = Vec::new();
-    let positions: Vec<ChunkPos> = world.iter().map(|(position, _)| *position).collect();
-    for position in positions {
-        let Some(mesh) = mesh_chunk_section(&world, position, 0, &registry, 16, 16) else {
-            continue;
-        };
-        let offset_x = position.x as f32 * SECTION_EDGE as f32;
-        let offset_z = position.z as f32 * SECTION_EDGE as f32;
+    for section in engine.build_loaded_world_meshes() {
+        let offset_x = section.position.x as f32 * 16.0;
+        let offset_z = section.position.z as f32 * 16.0;
+        let offset_y = section.section_y as f32 * 16.0;
 
-        vertices.extend(mesh.vertices.into_iter().map(|vertex| {
+        vertices.extend(section.mesh.vertices.into_iter().map(|vertex| {
             let color = match vertex.block_id {
                 BlockId(1) => [0.30, 0.68, 0.24],
                 BlockId(2) => [0.48, 0.31, 0.18],
@@ -642,7 +599,7 @@ fn sample_world_vertices() -> Vec<Vertex> {
             Vertex {
                 position: [
                     vertex.position[0] + offset_x,
-                    vertex.position[1],
+                    vertex.position[1] + offset_y,
                     vertex.position[2] + offset_z,
                 ],
                 uv: vertex.uv,
@@ -651,6 +608,5 @@ fn sample_world_vertices() -> Vec<Vertex> {
             }
         }));
     }
-
     vertices
 }
