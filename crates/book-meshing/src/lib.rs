@@ -1,5 +1,5 @@
 use book_core::{BlockId, BlockRegistry};
-use book_world::{ChunkSection, SECTION_EDGE};
+use book_world::{ChunkManager, ChunkPos, ChunkSection, SECTION_EDGE};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MeshVertex {
@@ -23,6 +23,17 @@ impl ChunkMesh {
     }
 }
 
+/// Neighbor sections surrounding a section in the six cardinal directions.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SectionNeighbors<'a> {
+    pub west: Option<&'a ChunkSection>,
+    pub east: Option<&'a ChunkSection>,
+    pub north: Option<&'a ChunkSection>,
+    pub south: Option<&'a ChunkSection>,
+    pub below: Option<&'a ChunkSection>,
+    pub above: Option<&'a ChunkSection>,
+}
+
 /// Builds a CPU mesh and removes faces hidden by solid blocks in this section.
 /// Faces at section borders stay visible when no adjacent section is supplied.
 pub fn mesh_section(
@@ -31,15 +42,13 @@ pub fn mesh_section(
     atlas_columns: u16,
     atlas_rows: u16,
 ) -> ChunkMesh {
-    mesh_section_with_vertical_neighbors(section, None, None, registry, atlas_columns, atlas_rows)
+    mesh_section_with_neighbors(section, SectionNeighbors::default(), registry, atlas_columns, atlas_rows)
 }
 
-/// Builds a section mesh while checking the sections immediately below and above it.
-/// This prevents internal horizontal faces from being emitted at vertical section seams.
-pub fn mesh_section_with_vertical_neighbors(
+/// Builds a section mesh using all available cardinal neighbor sections.
+pub fn mesh_section_with_neighbors(
     section: &ChunkSection,
-    below: Option<&ChunkSection>,
-    above: Option<&ChunkSection>,
+    neighbors: SectionNeighbors<'_>,
     registry: &BlockRegistry,
     atlas_columns: u16,
     atlas_rows: u16,
@@ -73,7 +82,7 @@ pub fn mesh_section_with_vertical_neighbors(
                 let pz = z as f32;
 
                 for face in FACES.iter() {
-                    if neighbor_is_solid(section, below, above, registry, x, y, z, face.neighbor) {
+                    if neighbor_is_solid(section, neighbors, registry, x, y, z, face.neighbor) {
                         continue;
                     }
 
@@ -98,10 +107,44 @@ pub fn mesh_section_with_vertical_neighbors(
     mesh
 }
 
+/// Builds a mesh directly from a loaded world chunk and its loaded neighbors.
+/// Returns None when the requested chunk column or section is not loaded.
+pub fn mesh_chunk_section(
+    manager: &ChunkManager,
+    position: ChunkPos,
+    section_y: i32,
+    registry: &BlockRegistry,
+    atlas_columns: u16,
+    atlas_rows: u16,
+) -> Option<ChunkMesh> {
+    let column = manager.column(position)?;
+    let section = column.section(section_y)?;
+
+    let neighbors = SectionNeighbors {
+        west: position.x.checked_sub(1)
+            .and_then(|x| manager.column(ChunkPos { x, z: position.z }))
+            .and_then(|column| column.section(section_y)),
+        east: position.x.checked_add(1)
+            .and_then(|x| manager.column(ChunkPos { x, z: position.z }))
+            .and_then(|column| column.section(section_y)),
+        north: position.z.checked_sub(1)
+            .and_then(|z| manager.column(ChunkPos { x: position.x, z }))
+            .and_then(|column| column.section(section_y)),
+        south: position.z.checked_add(1)
+            .and_then(|z| manager.column(ChunkPos { x: position.x, z }))
+            .and_then(|column| column.section(section_y)),
+        below: section_y.checked_sub(1).and_then(|y| column.section(y)),
+        above: section_y.checked_add(1).and_then(|y| column.section(y)),
+    };
+
+    Some(mesh_section_with_neighbors(
+        section, neighbors, registry, atlas_columns, atlas_rows,
+    ))
+}
+
 fn neighbor_is_solid(
     section: &ChunkSection,
-    below: Option<&ChunkSection>,
-    above: Option<&ChunkSection>,
+    neighbors: SectionNeighbors<'_>,
     registry: &BlockRegistry,
     x: usize,
     y: usize,
@@ -111,21 +154,20 @@ fn neighbor_is_solid(
     let nx = x as i32 + offset[0];
     let ny = y as i32 + offset[1];
     let nz = z as i32 + offset[2];
+    let edge = SECTION_EDGE as i32;
 
-    // Only vertical section seams are resolved here. Horizontal chunk seams
-    // will be handled by the world-aware meshing stage.
-    let neighbor = if nx < 0 || nx >= SECTION_EDGE as i32 || nz < 0 || nz >= SECTION_EDGE as i32 {
-        return false;
+    let neighbor = if nx < 0 {
+        neighbors.west.and_then(|n| n.get(SECTION_EDGE - 1, y, z))
+    } else if nx >= edge {
+        neighbors.east.and_then(|n| n.get(0, y, z))
+    } else if nz < 0 {
+        neighbors.north.and_then(|n| n.get(x, y, SECTION_EDGE - 1))
+    } else if nz >= edge {
+        neighbors.south.and_then(|n| n.get(x, y, 0))
     } else if ny < 0 {
-        if ny != -1 {
-            return false;
-        }
-        below.and_then(|neighbor| neighbor.get(nx as usize, SECTION_EDGE - 1, nz as usize))
-    } else if ny >= SECTION_EDGE as i32 {
-        if ny != SECTION_EDGE as i32 {
-            return false;
-        }
-        above.and_then(|neighbor| neighbor.get(nx as usize, 0, nz as usize))
+        neighbors.below.and_then(|n| n.get(x, SECTION_EDGE - 1, z))
+    } else if ny >= edge {
+        neighbors.above.and_then(|n| n.get(x, 0, z))
     } else {
         section.get(nx as usize, ny as usize, nz as usize)
     };
@@ -229,11 +271,13 @@ mod tests {
         upper.set(4, 0, 7, BlockId(1));
 
         let registry = registry();
-        let lower_mesh = mesh_section_with_vertical_neighbors(
-            &lower, None, Some(&upper), &registry, 16, 16,
+        let lower_mesh = mesh_section_with_neighbors(
+            &lower, SectionNeighbors { above: Some(&upper), ..Default::default() },
+            &registry, 16, 16,
         );
-        let upper_mesh = mesh_section_with_vertical_neighbors(
-            &upper, Some(&lower), None, &registry, 16, 16,
+        let upper_mesh = mesh_section_with_neighbors(
+            &upper, SectionNeighbors { below: Some(&lower), ..Default::default() },
+            &registry, 16, 16,
         );
 
         assert_eq!(lower_mesh.quad_count(), 5);
@@ -242,12 +286,53 @@ mod tests {
     }
 
     #[test]
+    fn horizontal_neighbor_sections_hide_shared_faces() {
+        let mut center = ChunkSection::new();
+        let mut east = ChunkSection::new();
+        center.set(SECTION_EDGE - 1, 3, 6, BlockId(1));
+        east.set(0, 3, 6, BlockId(1));
+
+        let registry = registry();
+        let center_mesh = mesh_section_with_neighbors(
+            &center,
+            SectionNeighbors { east: Some(&east), ..Default::default() },
+            &registry, 16, 16,
+        );
+        let east_mesh = mesh_section_with_neighbors(
+            &east,
+            SectionNeighbors { west: Some(&center), ..Default::default() },
+            &registry, 16, 16,
+        );
+
+        assert_eq!(center_mesh.quad_count(), 5);
+        assert_eq!(east_mesh.quad_count(), 5);
+    }
+
+    #[test]
+    fn world_mesher_reads_loaded_neighbor_chunks() {
+        use book_world::{ChunkColumn, ChunkManager, ChunkPos};
+
+        let mut manager = ChunkManager::new();
+        let center_pos = ChunkPos { x: 0, z: 0 };
+        let east_pos = ChunkPos { x: 1, z: 0 };
+        let mut center = ChunkColumn::new(center_pos);
+        let mut east = ChunkColumn::new(east_pos);
+        center.section_mut(0).set(SECTION_EDGE - 1, 3, 6, BlockId(1));
+        east.section_mut(0).set(0, 3, 6, BlockId(1));
+        manager.insert_column(center);
+        manager.insert_column(east);
+
+        let mesh = mesh_chunk_section(&manager, center_pos, 0, &registry(), 16, 16)
+            .expect("loaded center section should be meshed");
+        assert_eq!(mesh.quad_count(), 5);
+        assert!(mesh_chunk_section(&manager, ChunkPos { x: 8, z: 8 }, 0, &registry(), 16, 16).is_none());
+    }
+
+    #[test]
     fn missing_vertical_neighbor_keeps_border_face_visible() {
         let mut section = ChunkSection::new();
         section.set(4, SECTION_EDGE - 1, 7, BlockId(1));
-        let mesh = mesh_section_with_vertical_neighbors(
-            &section, None, None, &registry(), 16, 16,
-        );
+        let mesh = mesh_section(&section, &registry(), 16, 16);
         assert_eq!(mesh.quad_count(), 6);
     }
 
