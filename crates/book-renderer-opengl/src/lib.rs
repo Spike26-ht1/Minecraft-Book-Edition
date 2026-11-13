@@ -86,16 +86,9 @@ in vec2 uv;
 in vec3 color;
 out vec2 v_uv;
 out vec3 v_color;
-uniform float u_time;
+uniform mat4 u_view_projection;
 void main() {
-    vec3 centered = position - vec3(8.0, 0.0, 8.0);
-    float angle = 0.42 + sin(u_time * 0.12) * 0.08;
-    float c = cos(angle);
-    float s = sin(angle);
-    float rotated_x = centered.x * c - centered.z * s;
-    float rotated_z = centered.x * s + centered.z * c;
-    gl_Position = vec4(rotated_x * 0.075, centered.y * 0.13 - rotated_z * 0.045,
-                       0.5 + rotated_z * 0.001 - centered.y * 0.001, 1.0);
+    gl_Position = u_view_projection * vec4(position, 1.0);
     v_uv = uv;
     v_color = color;
 }
@@ -151,16 +144,9 @@ in vec2 uv;
 in vec3 color;
 out vec2 v_uv;
 out vec3 v_color;
-uniform float u_time;
+uniform mat4 u_view_projection;
 void main() {
-    vec3 centered = position - vec3(8.0, 0.0, 8.0);
-    float angle = 0.42 + sin(u_time * 0.12) * 0.08;
-    float c = cos(angle);
-    float s = sin(angle);
-    float rotated_x = centered.x * c - centered.z * s;
-    float rotated_z = centered.x * s + centered.z * c;
-    gl_Position = vec4(rotated_x * 0.075, centered.y * 0.13 - rotated_z * 0.045,
-                       0.5 + rotated_z * 0.001 - centered.y * 0.001, 1.0);
+    gl_Position = u_view_projection * vec4(position, 1.0);
     v_uv = uv;
     v_color = color;
 }
@@ -203,7 +189,6 @@ pub struct OpenGlRenderer {
     chunk_vertices: VertexBuffer<Vertex>,
     program: Program,
     debug_program: Program,
-    started: Instant,
     last_frame: Instant,
     fps_window_started: Instant,
     frames_in_window: u32,
@@ -262,7 +247,7 @@ impl OpenGlRenderer {
         let now = Instant::now();
         Ok((window, Self {
             display, chunk_vertices, program, debug_program,
-            started: now, last_frame: now, fps_window_started: now,
+            last_frame: now, fps_window_started: now,
             frames_in_window: 0, fps: 0, last_frame_ms: 0.0, debug_visible: false,
             #[cfg(target_os = "android")]
             first_frame_logged: false,
@@ -368,12 +353,13 @@ impl RendererBackend for OpenGlRenderer {
             depth: Depth { test: DepthTest::IfLess, write: true, ..Depth::default() },
             ..DrawParameters::default()
         };
-        let elapsed = self.started.elapsed().as_secs_f32();
+        let (width, height) = self.display.get_framebuffer_dimensions();
+        let view_projection = voxel_camera_matrix(width as f32 / height.max(1) as f32);
         target.draw(
             &self.chunk_vertices,
             NoIndices(glium::index::PrimitiveType::TrianglesList),
             &self.program,
-            &uniform! { u_time: elapsed },
+            &uniform! { u_view_projection: view_projection },
             &parameters,
         ).map_err(|error| RendererError::new(format!("OpenGL chunk draw: {error}")))?;
         if self.debug_visible { self.draw_debug_overlay(&mut target)?; }
@@ -386,6 +372,64 @@ impl RendererBackend for OpenGlRenderer {
             record_android_diagnostic("Renderer: first frame presented successfully");
         }
         Ok(())
+    }
+}
+
+fn normalize3(value: [f32; 3]) -> [f32; 3] {
+    let length = (value[0] * value[0] + value[1] * value[1] + value[2] * value[2]).sqrt().max(0.0001);
+    [value[0] / length, value[1] / length, value[2] / length]
+}
+
+fn dot3(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+
+/// Perspective camera aimed at the center of the procedural voxel showcase.
+/// Matrices are column-major to match GLSL uniforms.
+fn voxel_camera_matrix(aspect: f32) -> [[f32; 4]; 4] {
+    let eye = [23.0, 19.0, 27.0];
+    let target = [8.0, 2.0, 8.0];
+    let forward = normalize3([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
+    let side = normalize3(cross3(forward, [0.0, 1.0, 0.0]));
+    let up = cross3(side, forward);
+    let view = [
+        [side[0], up[0], -forward[0], 0.0],
+        [side[1], up[1], -forward[1], 0.0],
+        [side[2], up[2], -forward[2], 0.0],
+        [-dot3(side, eye), -dot3(up, eye), dot3(forward, eye), 1.0],
+    ];
+    let near = 0.1_f32;
+    let far = 128.0_f32;
+    let focal = 1.0 / (std::f32::consts::FRAC_PI_3 * 0.5).tan();
+    let projection = [
+        [focal / aspect.max(0.1), 0.0, 0.0, 0.0],
+        [0.0, focal, 0.0, 0.0],
+        [0.0, 0.0, (far + near) / (near - far), -1.0],
+        [0.0, 0.0, (2.0 * far * near) / (near - far), 0.0],
+    ];
+    let mut result = [[0.0; 4]; 4];
+    for column in 0..4 {
+        for row in 0..4 {
+            result[column][row] = (0..4).map(|index| projection[index][row] * view[column][index]).sum();
+        }
+    }
+    result
+}
+
+#[cfg(test)]
+mod camera_tests {
+    use super::voxel_camera_matrix;
+
+    #[test]
+    fn camera_matrix_is_finite_for_mobile_aspect_ratios() {
+        for aspect in [0.5, 1.0, 1.777, 2.5] {
+            let matrix = voxel_camera_matrix(aspect);
+            assert!(matrix.iter().flatten().all(|value| value.is_finite()));
+        }
     }
 }
 
