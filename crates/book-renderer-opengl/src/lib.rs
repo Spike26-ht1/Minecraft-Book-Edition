@@ -669,6 +669,7 @@ fn sample_world_meshes(engine: &BookingEngine) -> Vec<(i32, i32, Vec<Vertex>)> {
                 BlockId(1) => [0.30, 0.68, 0.24],
                 BlockId(2) => [0.48, 0.31, 0.18],
                 BlockId(3) => [0.48, 0.50, 0.52],
+                BlockId(4) => [0.24, 0.25, 0.27],
                 _ => [1.0, 0.0, 1.0],
             };
             Vertex {
