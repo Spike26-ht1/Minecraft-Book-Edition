@@ -26,6 +26,57 @@ use glium::{implement_vertex, Blend, Depth, DepthTest, DrawParameters, Program, 
 use glutin::surface::WindowSurface;
 use std::time::Instant;
 
+#[cfg(target_os = "android")]
+use std::fs::OpenOptions;
+#[cfg(target_os = "android")]
+use std::io::Write;
+#[cfg(target_os = "android")]
+use std::path::PathBuf;
+#[cfg(target_os = "android")]
+use std::sync::OnceLock;
+#[cfg(target_os = "android")]
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[cfg(target_os = "android")]
+static ANDROID_DIAGNOSTIC_LOG_PATHS: OnceLock<[PathBuf; 2]> = OnceLock::new();
+
+/// Configure persistent startup diagnostics for the Android game and launcher logs.
+#[cfg(target_os = "android")]
+pub fn set_android_diagnostic_log_paths(game_log: PathBuf, launcher_log: PathBuf) {
+    let _ = ANDROID_DIAGNOSTIC_LOG_PATHS.set([game_log, launcher_log]);
+}
+
+/// Write an Android startup event to Logcat and, once configured, to both app log files.
+#[cfg(target_os = "android")]
+pub fn record_android_diagnostic(message: &str) {
+    log::info!("Android startup: {message}");
+    let Some(paths) = ANDROID_DIAGNOSTIC_LOG_PATHS.get() else {
+        return;
+    };
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+
+    for path in paths {
+        match OpenOptions::new().create(true).append(true).open(path) {
+            Ok(mut file) => {
+                if let Err(error) = writeln!(file, "[{timestamp}] {message}") {
+                    log::warn!(
+                        "Could not write Android diagnostic log {}: {error}",
+                        path.display()
+                    );
+                }
+            }
+            Err(error) => log::warn!(
+                "Could not open Android diagnostic log {}: {error}",
+                path.display()
+            ),
+        }
+    }
+}
+
 
 #[cfg(target_os = "android")]
 const VERTEX_SHADER: &str = r#"
@@ -159,6 +210,8 @@ pub struct OpenGlRenderer {
     fps: u32,
     last_frame_ms: f32,
     debug_visible: bool,
+    #[cfg(target_os = "android")]
+    first_frame_logged: bool,
 }
 
 impl OpenGlRenderer {
@@ -191,18 +244,28 @@ impl OpenGlRenderer {
         window: glium::winit::window::Window,
         display: glium::backend::glutin::Display<WindowSurface>,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
+        #[cfg(target_os = "android")]
+        record_android_diagnostic("Renderer: creating demo chunk vertex buffer");
         let chunk_vertices = VertexBuffer::new(&display, &demo_chunk_vertices())
             .map_err(|error| RendererError::new(format!("Chunk vertex buffer: {error}")))?;
+        #[cfg(target_os = "android")]
+        record_android_diagnostic("Renderer: compiling chunk shader program");
         let program = Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None)
             .map_err(|error| RendererError::new(format!("Chunk shader program: {error}")))?;
+        #[cfg(target_os = "android")]
+        record_android_diagnostic("Renderer: compiling debug overlay shader program");
         let debug_program = Program::from_source(
             &display, DEBUG_VERTEX_SHADER, DEBUG_FRAGMENT_SHADER, None,
         ).map_err(|error| RendererError::new(format!("Debug overlay shader: {error}")))?;
+        #[cfg(target_os = "android")]
+        record_android_diagnostic("Renderer: GPU resources and shader programs are ready");
         let now = Instant::now();
         Ok((window, Self {
             display, chunk_vertices, program, debug_program,
             started: now, last_frame: now, fps_window_started: now,
             frames_in_window: 0, fps: 0, last_frame_ms: 0.0, debug_visible: false,
+            #[cfg(target_os = "android")]
+            first_frame_logged: false,
         }))
     }
 
@@ -316,7 +379,13 @@ impl RendererBackend for OpenGlRenderer {
         if self.debug_visible { self.draw_debug_overlay(&mut target)?; }
         #[cfg(target_os = "android")]
         self.draw_debug_button(&mut target)?;
-        target.finish().map_err(|error| RendererError::new(format!("OpenGL present: {error}")))
+        target.finish().map_err(|error| RendererError::new(format!("OpenGL present: {error}")))?;
+        #[cfg(target_os = "android")]
+        if !self.first_frame_logged {
+            self.first_frame_logged = true;
+            record_android_diagnostic("Renderer: first frame presented successfully");
+        }
+        Ok(())
     }
 }
 
@@ -385,28 +454,37 @@ fn create_android_display(
 > {
     use glium::winit::window::Window;
 
-    log::info!("Preparing Android native window and EGL display");
+    record_android_diagnostic("EGL: preparing Android native window and display");
     let attributes = Window::default_attributes().with_title(title);
     let display_builder = DisplayBuilder::new().with_window_attributes(Some(attributes));
     // 16-bit depth buffers are broadly supported by mobile EGL implementations.
     let template = ConfigTemplateBuilder::new()
         .with_api(Api::GLES3)
         .with_depth_size(16);
+    record_android_diagnostic("EGL: requesting an OpenGL ES 3 configuration");
     let (window, config) = display_builder
         .build(event_loop, template, |mut configs| {
             let selected = configs.next();
-            log::info!("Android EGL GLES3 configuration available: {}", selected.is_some());
-            selected.expect("no OpenGL ES 3 EGL configuration found")
+            record_android_diagnostic(&format!(
+                "EGL: OpenGL ES 3 configuration available: {}",
+                selected.is_some()
+            ));
+            selected.unwrap_or_else(|| {
+                record_android_diagnostic(
+                    "EGL ERROR: no OpenGL ES 3 EGL configuration was returned",
+                );
+                panic!("no OpenGL ES 3 EGL configuration found");
+            })
         })
         .map_err(|error| RendererError::new(format!("Android EGL configuration: {error}")))?;
-    log::info!("Android EGL configuration created");
+    record_android_diagnostic("EGL: configuration created");
     let window = window.ok_or_else(|| RendererError::new("Android native window was not created"))?;
-    log::info!("Android native window created");
+    record_android_diagnostic("Android: native window created");
     let raw_window = window
         .window_handle()
         .map_err(|error| RendererError::new(format!("Android window handle: {error}")))?
         .as_raw();
-    log::info!("Requesting an OpenGL ES 3.0 context");
+    record_android_diagnostic("EGL: requesting an OpenGL ES 3.0 context");
     let context_attributes = ContextAttributesBuilder::new()
         .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
         .build(Some(raw_window));
@@ -416,6 +494,7 @@ fn create_android_display(
             .create_context(&config, &context_attributes)
     }
     .map_err(|error| RendererError::new(format!("OpenGL ES 3 context: {error}")))?;
+    record_android_diagnostic("EGL: OpenGL ES 3.0 context created");
 
     let size = window.inner_size();
     let surface_attributes = SurfaceAttributesBuilder::<WindowSurface>::new().build(
@@ -423,20 +502,22 @@ fn create_android_display(
         NonZeroU32::new(size.width.max(1)).expect("non-zero surface width"),
         NonZeroU32::new(size.height.max(1)).expect("non-zero surface height"),
     );
+    record_android_diagnostic("EGL: creating Android window surface");
     let surface = unsafe {
         config
             .display()
             .create_window_surface(&config, &surface_attributes)
     }
     .map_err(|error| RendererError::new(format!("Android EGL surface: {error}")))?;
-    log::info!("Android EGL window surface created");
+    record_android_diagnostic("EGL: Android window surface created");
+    record_android_diagnostic("EGL: making OpenGL ES context current");
     let current = not_current
         .make_current(&surface)
         .map_err(|error| RendererError::new(format!("Make OpenGL ES current: {error}")))?;
-    log::info!("OpenGL ES context made current");
+    record_android_diagnostic("EGL: OpenGL ES context is current");
     let display = glium::backend::glutin::Display::from_context_surface(current, surface)
         .map_err(|error| RendererError::new(format!("Glium display: {error}")))?;
-    log::info!("Glium display initialized");
+    record_android_diagnostic("Glium: display initialized");
 
     Ok((window, display))
 }

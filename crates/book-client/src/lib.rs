@@ -21,7 +21,9 @@ fn initialize_android_logging() {
     );
     log::set_max_level(log::LevelFilter::Trace);
     std::panic::set_hook(Box::new(|panic_info| {
-        log::error!("PANIC during Android startup: {panic_info}");
+        let message = format!("PANIC during Android startup: {panic_info}");
+        log::error!("{message}");
+        book_renderer_opengl::record_android_diagnostic(&message);
     }));
     log::info!("Minecraft Book Edition Pre-Alpha 1.2.0: android_main entered");
 }
@@ -84,14 +86,21 @@ fn initialize_storage(app: &AndroidApp) -> Option<PathBuf> {
             return None;
         }
     }
+    let game_log_path = root.join("game/logs/latest.log");
+    let launcher_log_path = root.join("launcher/logs/launcher.log");
+    book_renderer_opengl::set_android_diagnostic_log_paths(
+        game_log_path.clone(),
+        launcher_log_path.clone(),
+    );
     append_startup_log(
-        &root.join("game/logs/latest.log"),
+        &game_log_path,
         "Minecraft Book Edition entered; game storage initialized",
     );
     append_startup_log(
-        &root.join("launcher/logs/launcher.log"),
+        &launcher_log_path,
         "Minecraft Book Edition launcher entered; launcher storage initialized",
     );
+    book_renderer_opengl::record_android_diagnostic("Storage initialization completed");
     log::info!("Android media storage initialized at {}", root.display());
     Some(root)
 }
@@ -101,22 +110,33 @@ fn initialize_storage(app: &AndroidApp) -> Option<PathBuf> {
 pub fn android_main(app: AndroidApp) {
     initialize_android_logging();
     let _storage_root = match initialize_storage(&app) {
-        Some(root) => Some(root),
+        Some(root) => {
+            book_renderer_opengl::record_android_diagnostic("android_main: storage is ready");
+            Some(root)
+        }
         None => {
             log::warn!("Android/media storage could not be initialized; continuing without it");
+            book_renderer_opengl::record_android_diagnostic(
+                "android_main: storage initialization failed; continuing without media storage",
+            );
             None
         }
     };
 
+    book_renderer_opengl::record_android_diagnostic("Winit: creating Android event loop");
     let mut builder = glium::winit::event_loop::EventLoopBuilder::new();
     builder.with_android_app(app);
     let event_loop = match builder.build() {
         Ok(event_loop) => {
             log::info!("Winit Android event loop created");
+            book_renderer_opengl::record_android_diagnostic("Winit: Android event loop created");
             event_loop
         }
         Err(error) => {
             log::error!("Failed to create Winit Android event loop: {error}");
+            book_renderer_opengl::record_android_diagnostic(
+                &format!("Winit ERROR: could not create Android event loop: {error}"),
+            );
             return;
         }
     };
@@ -126,8 +146,12 @@ pub fn android_main(app: AndroidApp) {
     let result = event_loop.run(move |event, active_loop| match event {
         Event::Resumed => {
             log::info!("Android lifecycle: Resumed");
+            book_renderer_opengl::record_android_diagnostic("Android lifecycle: Resumed");
             if renderer_state.is_none() {
                 log::info!("Starting OpenGL ES 3 renderer initialization");
+                book_renderer_opengl::record_android_diagnostic(
+                    "Renderer: starting OpenGL ES 3 initialization",
+                );
                 match OpenGlRenderer::new(
                     active_loop,
                     "Minecraft Book Edition — Pre-Alpha 1.2.0",
@@ -136,10 +160,16 @@ pub fn android_main(app: AndroidApp) {
                 ) {
                     Ok((window, renderer)) => {
                         log::info!("OpenGL ES renderer initialized successfully");
+                        book_renderer_opengl::record_android_diagnostic(
+                            "Renderer: OpenGL ES renderer initialized successfully",
+                        );
                         renderer_state = Some((window, renderer));
                     }
                     Err(error) => {
                         log::error!("OpenGL ES renderer initialization failed: {error}");
+                        book_renderer_opengl::record_android_diagnostic(
+                            &format!("Renderer ERROR: initialization failed: {error}"),
+                        );
                         active_loop.exit();
                     }
                 }
@@ -147,6 +177,9 @@ pub fn android_main(app: AndroidApp) {
         }
         Event::Suspended => {
             log::info!("Android lifecycle: Suspended; releasing renderer");
+            book_renderer_opengl::record_android_diagnostic(
+                "Android lifecycle: Suspended; releasing renderer",
+            );
             renderer_state = None;
         }
         Event::WindowEvent { window_id, event } => {
@@ -186,12 +219,21 @@ pub fn android_main(app: AndroidApp) {
         Event::AboutToWait => {
             if let Some((window, _)) = renderer_state.as_ref() { window.request_redraw(); }
         }
-        Event::LoopExiting => log::info!("Winit Android event loop is exiting"),
+        Event::LoopExiting => {
+            log::info!("Winit Android event loop is exiting");
+            book_renderer_opengl::record_android_diagnostic("Winit: event loop is exiting");
+        }
         _ => {}
     });
     if let Err(error) = result {
         log::error!("Winit Android event loop returned an error: {error}");
+        book_renderer_opengl::record_android_diagnostic(
+            &format!("Winit ERROR: event loop returned: {error}"),
+        );
     } else {
         log::info!("Winit Android event loop returned normally");
+        book_renderer_opengl::record_android_diagnostic(
+            "Winit: event loop returned normally",
+        );
     }
 }
