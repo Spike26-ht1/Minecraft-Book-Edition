@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
 book-core = { path = "../book-core" }
 serde.workspace = true
 serde_json.workspace = true
