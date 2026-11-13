@@ -164,6 +164,116 @@ impl ModManifest {
     }
 }
 
+
+/// Integer world position exposed to gameplay mods.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BlockPosition {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+/// A block declaration submitted by a mod during initialization.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BlockRegistration {
+    /// Namespaced identifier, for example "example:marble".
+    pub id: String,
+    pub display_name: String,
+    /// Resource key resolved by the resource/texture pipeline.
+    pub texture_key: String,
+    pub solid: bool,
+    pub opaque: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ModEventKind {
+    ClientStarted,
+    WorldLoaded,
+    WorldUnloaded,
+    WorldTick,
+    BlockPlaced,
+    BlockBroken,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ModEvent {
+    ClientStarted,
+    WorldLoaded,
+    WorldUnloaded,
+    WorldTick { tick: u64 },
+    BlockPlaced { position: BlockPosition, block: book_core::BlockId },
+    BlockBroken { position: BlockPosition, previous: book_core::BlockId },
+}
+
+impl ModEvent {
+    pub fn kind(&self) -> ModEventKind {
+        match self {
+            Self::ClientStarted => ModEventKind::ClientStarted,
+            Self::WorldLoaded => ModEventKind::WorldLoaded,
+            Self::WorldUnloaded => ModEventKind::WorldUnloaded,
+            Self::WorldTick { .. } => ModEventKind::WorldTick,
+            Self::BlockPlaced { .. } => ModEventKind::BlockPlaced,
+            Self::BlockBroken { .. } => ModEventKind::BlockBroken,
+        }
+    }
+}
+
+/// Errors returned by the host when a mod requests an operation it cannot do.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ModApiError {
+    CapabilityDenied(Capability),
+    InvalidIdentifier(String),
+    DuplicateIdentifier(String),
+    WorldUnavailable,
+    InvalidOperation(String),
+}
+
+impl fmt::Display for ModApiError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CapabilityDenied(capability) => write!(formatter, "capability not granted: {capability:?}"),
+            Self::InvalidIdentifier(id) => write!(formatter, "invalid identifier: {id}"),
+            Self::DuplicateIdentifier(id) => write!(formatter, "identifier already registered: {id}"),
+            Self::WorldUnavailable => formatter.write_str("no world is currently loaded"),
+            Self::InvalidOperation(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for ModApiError {}
+
+/// Narrow host interface passed to mods. Implementations must enforce the
+/// capabilities granted to the owning mod before performing each operation.
+pub trait ModContext {
+    fn register_block(&mut self, block: BlockRegistration) -> Result<book_core::BlockId, ModApiError>;
+    fn get_block(&self, position: BlockPosition) -> Result<Option<book_core::BlockId>, ModApiError>;
+    fn set_block(&mut self, position: BlockPosition, block: book_core::BlockId) -> Result<(), ModApiError>;
+}
+
+/// Rust-side mod contract. This is a source-level API, not a stable dynamic
+/// library ABI; separately compiled native modules need a versioned host ABI.
+pub trait BookMod: Send {
+    fn on_load(&mut self, _context: &mut dyn ModContext) -> Result<(), ModApiError> {
+        Ok(())
+    }
+
+    fn subscriptions(&self) -> &'static [ModEventKind] {
+        &[]
+    }
+
+    fn on_event(
+        &mut self,
+        _event: &ModEvent,
+        _context: &mut dyn ModContext,
+    ) -> Result<(), ModApiError> {
+        Ok(())
+    }
+
+    fn on_unload(&mut self, _context: &mut dyn ModContext) -> Result<(), ModApiError> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,6 +336,25 @@ mod tests {
         let mut value = manifest();
         value.dependencies[0].version.clear();
         assert_eq!(value.validate(), Err(ManifestError::EmptyDependencyVersion("book:core".to_owned())));
+    }
+
+    #[test]
+    fn event_kind_matches_payload() {
+        let event = ModEvent::WorldTick { tick: 42 };
+        assert_eq!(event.kind(), ModEventKind::WorldTick);
+    }
+
+    #[test]
+    fn rust_mods_can_implement_the_shared_lifecycle_contract() {
+        struct ExampleMod;
+        impl BookMod for ExampleMod {
+            fn subscriptions(&self) -> &'static [ModEventKind] {
+                &[ModEventKind::WorldLoaded, ModEventKind::WorldTick]
+            }
+        }
+
+        let example = ExampleMod;
+        assert!(example.subscriptions().contains(&ModEventKind::WorldTick));
     }
 
     #[test]
