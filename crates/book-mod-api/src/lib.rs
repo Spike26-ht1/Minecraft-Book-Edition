@@ -246,8 +246,24 @@ impl std::error::Error for ModApiError {}
 /// capabilities granted to the owning mod before performing each operation.
 pub trait ModContext {
     fn register_block(&mut self, block: BlockRegistration) -> Result<book_core::BlockId, ModApiError>;
-    fn get_block(&self, position: BlockPosition) -> Result<Option<book_core::BlockId>, ModApiError>;
-    fn set_block(&mut self, position: BlockPosition, block: book_core::BlockId) -> Result<(), ModApiError>;
+    fn get_block_state(&self, position: BlockPosition) -> Result<Option<book_core::BlockState>, ModApiError>;
+    fn set_block_state(
+        &mut self,
+        position: BlockPosition,
+        state: book_core::BlockState,
+    ) -> Result<(), ModApiError>;
+
+    fn get_block(&self, position: BlockPosition) -> Result<Option<book_core::BlockId>, ModApiError> {
+        self.get_block_state(position).map(|state| state.map(|value| value.block))
+    }
+
+    fn set_block(
+        &mut self,
+        position: BlockPosition,
+        block: book_core::BlockId,
+    ) -> Result<(), ModApiError> {
+        self.set_block_state(position, book_core::BlockState::new(block, 0))
+    }
 }
 
 /// Rust-side mod contract. This is a source-level API, not a stable dynamic
