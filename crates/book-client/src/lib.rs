@@ -1,5 +1,6 @@
 #![cfg(target_os = "android")]
 
+use booking_engine::BookingEngine;
 use book_renderer_api::{RenderFrame, RendererBackend};
 use book_renderer_opengl::OpenGlRenderer;
 use glium::winit::event::{ElementState, Event, TouchPhase, WindowEvent};
@@ -151,6 +152,8 @@ pub fn android_main(app: AndroidApp) {
         }
     };
 
+    let mut engine = BookingEngine::new();
+    engine.generate_prototype_terrain(1);
     let mut frame = RenderFrame::default();
     let mut renderer_state = None;
     let mut pressed_keys = HashSet::new();
@@ -170,6 +173,7 @@ pub fn android_main(app: AndroidApp) {
                     "Minecraft Book Edition — Pre-Alpha 1.2.0",
                     1280,
                     720,
+                    &engine,
                 ) {
                     Ok((window, renderer)) => {
                         log::info!("OpenGL ES renderer initialized successfully");
