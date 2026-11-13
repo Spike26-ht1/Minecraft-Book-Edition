@@ -169,12 +169,14 @@ const FRAGMENT_SHADER: &str = r#"#version 140
 in vec2 v_uv;
 in vec3 v_normal;
 in vec3 v_color;
+uniform sampler2D u_atlas;
 out vec4 out_color;
 void main() {
     vec3 sun_direction = normalize(vec3(-0.4, 0.8, -0.3));
     float diffuse = max(dot(normalize(v_normal), sun_direction), 0.0);
     float lighting = 0.42 + diffuse * 0.58;
-    out_color = vec4(v_color * lighting, 1.0);
+    vec4 texel = texture(u_atlas, v_uv);
+    out_color = vec4(texel.rgb * v_color * lighting, texel.a);
 }
 "#;
 
