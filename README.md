@@ -12,7 +12,7 @@ The first test-build target is **Android ARM64 (arm64-v8a)**. Desktop targets re
 
 - Modular Rust workspace with separate client, world, assets, meshing, renderer, and mod API crates.
 - **Booking Engine** owns block registration, loaded chunks, prototype terrain generation, and CPU-side world mesh preparation.
-- 16 × 16 × 16 chunk sections and a world-coordinate chunk manager.
+- 16 × 16 × 16 chunk sections, a world-coordinate chunk manager, and compact palette-backed block-state storage.
 - Neighbor-aware face culling across all six chunk-section directions.
 - Per-chunk GPU vertex buffers and distance-based chunk render culling.
 - CPU texture-atlas packing and a prototype GPU atlas with nearest-neighbor sampling.
@@ -29,7 +29,7 @@ These are API foundations, not a completed runtime. Package discovery, dependenc
 
 ## Current limitations
 
-This is **not yet a playable Bedrock-compatible game**. Terrain is prototype data, and the texture atlas is generated test content rather than a real Bedrock resource-pack atlas. The project still needs resource-pack file loading and PNG decoding, Bedrock block states and palettes, biomes and production terrain generation, lighting propagation, entities, inventory/gameplay systems, world persistence, networking, and full touch movement controls.
+This is **not yet a playable Bedrock-compatible game**. Terrain is prototype data, and the texture atlas is generated test content rather than a real Bedrock resource-pack atlas. The project still needs resource-pack file loading and PNG decoding, Bedrock block-state property definitions and exact palette serialization, biomes and production terrain generation, lighting propagation, entities, inventory/gameplay systems, world persistence, networking, and full touch movement controls.
 
 Bedrock world, resource-pack, add-on, and server compatibility must be implemented and verified subsystem by subsystem. The project does not reuse proprietary RenderDragon code or game binaries.
 
