@@ -35,6 +35,7 @@ impl BookingEngine {
             (1, "book:grass_block", AtlasTile { x: 0, y: 0 }),
             (2, "book:dirt", AtlasTile { x: 1, y: 0 }),
             (3, "book:stone", AtlasTile { x: 2, y: 0 }),
+            (4, "book:bedrock", AtlasTile { x: 3, y: 0 }),
         ] {
             blocks.register(BlockDefinition {
                 id: BlockId(id), name: name.to_owned(), atlas_tile: tile,
@@ -49,36 +50,44 @@ impl BookingEngine {
     pub fn world(&self) -> &ChunkManager { &self.world }
     pub fn world_mut(&mut self) -> &mut ChunkManager { &mut self.world }
 
-    /// Generates deterministic prototype terrain around the origin.
-    /// A radius of 1 creates a 3x3 chunk area. This is not yet the Bedrock
-    /// compatible noise, biome, or structure generator.
+    /// Generates deterministic multi-section terrain around the origin.
+    ///
+    /// This is a temporary Booking terrain generator, not Bedrock's production
+    /// noise/biome/structure pipeline. It creates a 96-block vertical range
+    /// with a bedrock floor, stone, dirt, and a grass surface.
     pub fn generate_prototype_terrain(&mut self, chunk_radius: i32) {
         let radius = chunk_radius.max(0);
+        const MIN_Y: i32 = -32;
+
         for chunk_z in -radius..=radius {
             for chunk_x in -radius..=radius {
                 let position = ChunkPos { x: chunk_x, z: chunk_z };
                 let mut column = ChunkColumn::new(position);
-                let section = column.section_mut(0);
 
                 for local_z in 0..SECTION_EDGE {
                     for local_x in 0..SECTION_EDGE {
                         let world_x = chunk_x * SECTION_EDGE as i32 + local_x as i32;
                         let world_z = chunk_z * SECTION_EDGE as i32 + local_z as i32;
-                        let wave = ((world_x as f32 * 0.12).sin()
-                            + (world_z as f32 * 0.11).cos()) * 1.35;
-                        let distance = ((world_x as f32).powi(2)
-                            + (world_z as f32).powi(2)).sqrt();
-                        let ridge = distance * -0.045 + 1.8;
-                        let height = (3.0 + wave + ridge).round().clamp(1.0, 8.0) as usize;
+                        let broad = value_noise(world_x as f32 / 48.0, world_z as f32 / 48.0);
+                        let detail = value_noise(world_x as f32 / 17.0, world_z as f32 / 17.0);
+                        let surface_y = (27.0 + broad * 9.0 + detail * 3.0)
+                            .round()
+                            .clamp(16.0, 40.0) as i32;
 
-                        for y in 0..=height {
-                            let block = if y == height { BlockId(1) }
-                                else if y + 2 >= height { BlockId(2) }
-                                else { BlockId(3) };
-                            section.set(local_x, y, local_z, block);
+                        column.set_block(local_x, MIN_Y, local_z, BlockId(4));
+                        for world_y in (MIN_Y + 1)..=surface_y {
+                            let block = if world_y == surface_y {
+                                BlockId(1)
+                            } else if world_y >= surface_y - 3 {
+                                BlockId(2)
+                            } else {
+                                BlockId(3)
+                            };
+                            column.set_block(local_x, world_y, local_z, block);
                         }
                     }
                 }
+
                 self.world.insert_column(column);
             }
         }
@@ -105,7 +114,9 @@ mod tests {
         let mut engine = BookingEngine::new();
         engine.generate_prototype_terrain(1);
         assert_eq!(engine.loaded_chunk_count(), 9);
-        assert!(engine.world().get_block(0, 0, 0).is_some());
+        assert!(engine.world().get_block(0, -32, 0).is_some());
+        assert!(engine.world().get_block(0, 24, 0).is_some());
+        assert!(engine.world().column(ChunkPos { x: 0, z: 0 }).unwrap().section_count() >= 4);
     }
 
     #[test]
@@ -113,8 +124,10 @@ mod tests {
         let mut engine = BookingEngine::new();
         engine.generate_prototype_terrain(1);
         let meshes = engine.build_loaded_world_meshes();
-        assert_eq!(meshes.len(), 9);
+        assert!(meshes.len() > 9);
         assert!(meshes.iter().all(|section| !section.mesh.is_empty()));
+        assert!(meshes.iter().any(|section| section.section_y < 0));
+        assert!(meshes.iter().any(|section| section.section_y > 0));
     }
 
     #[test]
@@ -123,4 +136,37 @@ mod tests {
         engine.generate_prototype_terrain(1);
         assert!(engine.world().column(ChunkPos { x: -1, z: -1 }).is_some());
     }
+}
+
+/// Smooth deterministic value noise used by the prototype terrain generator.
+fn value_noise(x: f32, z: f32) -> f32 {
+    let x0 = x.floor() as i32;
+    let z0 = z.floor() as i32;
+    let tx = smoothstep(x - x.floor());
+    let tz = smoothstep(z - z.floor());
+
+    let a = lattice_value(x0, z0);
+    let b = lattice_value(x0 + 1, z0);
+    let c = lattice_value(x0, z0 + 1);
+    let d = lattice_value(x0 + 1, z0 + 1);
+    let top = lerp(a, b, tx);
+    let bottom = lerp(c, d, tx);
+    lerp(top, bottom, tz)
+}
+
+fn lattice_value(x: i32, z: i32) -> f32 {
+    let mut value = (x as u32).wrapping_mul(0x8da6_b343)
+        ^ (z as u32).wrapping_mul(0xd816_3841);
+    value ^= value >> 13;
+    value = value.wrapping_mul(0x85eb_ca6b);
+    value ^= value >> 16;
+    (value as f32 / u32::MAX as f32) * 2.0 - 1.0
+}
+
+fn smoothstep(value: f32) -> f32 {
+    value * value * (3.0 - 2.0 * value)
+}
+
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
 }
