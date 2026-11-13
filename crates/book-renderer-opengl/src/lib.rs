@@ -22,6 +22,7 @@ use raw_window_handle::HasWindowHandle;
 use std::num::NonZeroU32;
 use glium::index::NoIndices;
 use glium::texture::{RawImage2d, Texture2d};
+use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 use glium::uniform;
 use glium::{implement_vertex, Blend, Depth, DepthTest, DrawParameters, Program, Surface, VertexBuffer};
 use glutin::surface::WindowSurface;
@@ -427,7 +428,9 @@ impl RendererBackend for OpenGlRenderer {
                 &chunk.vertices,
                 NoIndices(glium::index::PrimitiveType::TrianglesList),
                 &self.program,
-                &uniform! { u_view_projection: view_projection, u_atlas: self.atlas.sampled() },
+                &uniform! { u_view_projection: view_projection, u_atlas: self.atlas.sampled()
+                    .minify_filter(MinifySamplerFilter::Nearest)
+                    .magnify_filter(MagnifySamplerFilter::Nearest) },
                 &parameters,
             ).map_err(|error| RendererError::new(format!(
                 "OpenGL chunk ({}, {}) draw: {error}", chunk.chunk_x, chunk.chunk_z
