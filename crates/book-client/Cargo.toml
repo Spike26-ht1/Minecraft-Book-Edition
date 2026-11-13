@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 booking-engine = { path = "../booking-engine" }
+book-core = { path = "../book-core" }
 book-renderer-api = { path = "../book-renderer-api" }
 book-renderer-opengl = { path = "../book-renderer-opengl" }
 glium = "0.36"
