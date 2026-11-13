@@ -44,7 +44,9 @@ impl PlayerController {
     pub fn spawn(engine: &BookingEngine, world_x: i32, world_z: i32) -> Option<Self> {
         let registry = engine.block_registry();
         for world_y in (-32..=64).rev() {
-            let block = engine.world().get_block(world_x, world_y, world_z)?;
+            let Some(block) = engine.world().get_block(world_x, world_y, world_z) else {
+                continue;
+            };
             let solid = registry.get(block).map(|definition| definition.solid).unwrap_or(false);
             if solid {
                 return Some(Self {
@@ -187,7 +189,7 @@ mod tests {
         for _ in 0..30 {
             player.update(&engine, PlayerInput { forward: 1.0, ..Default::default() }, 1.0 / 60.0);
         }
-        assert_ne!(player.position()[0], start[0]);
+        assert_ne!(player.position()[2], start[2]);
         assert_eq!(player.position()[1], start[1]);
     }
 }
