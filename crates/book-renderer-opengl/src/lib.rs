@@ -212,6 +212,7 @@ pub struct OpenGlRenderer {
     fps: u32,
     last_frame_ms: f32,
     debug_visible: bool,
+    visible_chunk_count: usize,
     #[cfg(target_os = "android")]
     first_frame_logged: bool,
 }
@@ -275,6 +276,7 @@ impl OpenGlRenderer {
             display, chunk_meshes, program, debug_program,
             last_frame: now, fps_window_started: now,
             frames_in_window: 0, fps: 0, last_frame_ms: 0.0, debug_visible: false,
+            visible_chunk_count: 0,
             #[cfg(target_os = "android")]
             first_frame_logged: false,
         }))
@@ -303,7 +305,7 @@ impl OpenGlRenderer {
             format!("FRAME: {:.2} MS", self.last_frame_ms),
             "RENDERER: BOOKING".to_owned(),
             "API: OPENGL ES / OPENGL".to_owned(),
-            format!("CHUNKS: {}", self.chunk_meshes.len()),
+            format!("CHUNKS: {} / {}", self.visible_chunk_count, self.chunk_meshes.len()),
             "BLOCKS: PROCEDURAL WORLD".to_owned(),
             format!("VERTICES: {vertex_count}"),
             "F3: HIDE DEBUG".to_owned(),
@@ -393,7 +395,18 @@ impl RendererBackend for OpenGlRenderer {
         };
         let (width, height) = self.display.get_framebuffer_dimensions();
         let view_projection = voxel_camera_matrix(width as f32 / height.max(1) as f32, frame.camera);
+        let render_distance = 8.0_f32 * 16.0;
+        let render_distance_squared = render_distance * render_distance;
+        self.visible_chunk_count = 0;
         for chunk in &self.chunk_meshes {
+            let center_x = chunk.chunk_x as f32 * 16.0 + 8.0;
+            let center_z = chunk.chunk_z as f32 * 16.0 + 8.0;
+            let dx = center_x - frame.camera.position[0];
+            let dz = center_z - frame.camera.position[2];
+            if dx * dx + dz * dz > render_distance_squared {
+                continue;
+            }
+            self.visible_chunk_count += 1;
             target.draw(
                 &chunk.vertices,
                 NoIndices(glium::index::PrimitiveType::TrianglesList),
