@@ -199,6 +199,11 @@ impl ChunkColumn {
         self.sections.len()
     }
 
+    /// Iterates loaded vertical sections in ascending world-height order.
+    pub fn iter_sections(&self) -> impl Iterator<Item = (i32, &ChunkSection)> {
+        self.sections.iter().map(|(section_y, section)| (*section_y, section))
+    }
+
     /// Reads a block state using local X/Z coordinates and absolute world Y.
     pub fn get_state(&self, local_x: usize, world_y: i32, local_z: usize) -> Option<BlockState> {
         if local_x >= SECTION_EDGE || local_z >= SECTION_EDGE {
