@@ -1,5 +1,5 @@
 mod player;
-pub use player::{PlayerController, PlayerInput};
+pub use player::{BlockHit, PlayerController, PlayerInput};
 
 //! Booking is the world and simulation engine for Minecraft Book Edition.
 //!
