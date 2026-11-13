@@ -195,9 +195,15 @@ out vec4 out_color;
 void main() { out_color = v_color; }
 "#;
 
+struct ChunkGpuMesh {
+    chunk_x: i32,
+    chunk_z: i32,
+    vertices: VertexBuffer<Vertex>,
+}
+
 pub struct OpenGlRenderer {
     display: glium::backend::glutin::Display<WindowSurface>,
-    chunk_vertices: VertexBuffer<Vertex>,
+    chunk_meshes: Vec<ChunkGpuMesh>,
     program: Program,
     debug_program: Program,
     last_frame: Instant,
@@ -242,8 +248,17 @@ impl OpenGlRenderer {
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: building chunk-manager world mesh");
-        let chunk_vertices = VertexBuffer::new(&display, &sample_world_vertices())
-            .map_err(|error| RendererError::new(format!("Chunk vertex buffer: {error}")))?;
+        let mut chunk_meshes = Vec::new();
+        for (chunk_x, chunk_z, vertices) in sample_world_meshes() {
+            if vertices.is_empty() { continue; }
+            let buffer = VertexBuffer::new(&display, &vertices)
+                .map_err(|error| RendererError::new(format!(
+                    "Chunk ({chunk_x}, {chunk_z}) vertex buffer: {error}"
+                )))?;
+            chunk_meshes.push(ChunkGpuMesh {
+                chunk_x, chunk_z, vertices: buffer,
+            });
+        }
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: compiling chunk shader program");
         let program = Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None)
@@ -257,7 +272,7 @@ impl OpenGlRenderer {
         record_android_diagnostic("Renderer: GPU resources and shader programs are ready");
         let now = Instant::now();
         Ok((window, Self {
-            display, chunk_vertices, program, debug_program,
+            display, chunk_meshes, program, debug_program,
             last_frame: now, fps_window_started: now,
             frames_in_window: 0, fps: 0, last_frame_ms: 0.0, debug_visible: false,
             #[cfg(target_os = "android")]
@@ -281,14 +296,14 @@ impl OpenGlRenderer {
     }
 
     fn draw_debug_overlay(&self, target: &mut glium::Frame) -> Result<(), RendererError> {
-        let vertex_count = self.chunk_vertices.len();
+        let vertex_count: usize = self.chunk_meshes.iter().map(|mesh| mesh.vertices.len()).sum();
         let lines = [
             "MINECRAFT BOOK EDITION 26.60".to_owned(),
             format!("FPS: {}", self.fps),
             format!("FRAME: {:.2} MS", self.last_frame_ms),
-            "RENDERER: OPENGL".to_owned(),
-            "API: OPENGL".to_owned(),
-            "CHUNKS: 9 (WORLD TEST)".to_owned(),
+            "RENDERER: BOOKING".to_owned(),
+            "API: OPENGL ES / OPENGL".to_owned(),
+            format!("CHUNKS: {}", self.chunk_meshes.len()),
             "BLOCKS: PROCEDURAL WORLD".to_owned(),
             format!("VERTICES: {vertex_count}"),
             "F3: HIDE DEBUG".to_owned(),
@@ -366,13 +381,17 @@ impl RendererBackend for OpenGlRenderer {
         };
         let (width, height) = self.display.get_framebuffer_dimensions();
         let view_projection = voxel_camera_matrix(width as f32 / height.max(1) as f32);
-        target.draw(
-            &self.chunk_vertices,
-            NoIndices(glium::index::PrimitiveType::TrianglesList),
-            &self.program,
-            &uniform! { u_view_projection: view_projection },
-            &parameters,
-        ).map_err(|error| RendererError::new(format!("OpenGL chunk draw: {error}")))?;
+        for chunk in &self.chunk_meshes {
+            target.draw(
+                &chunk.vertices,
+                NoIndices(glium::index::PrimitiveType::TrianglesList),
+                &self.program,
+                &uniform! { u_view_projection: view_projection },
+                &parameters,
+            ).map_err(|error| RendererError::new(format!(
+                "OpenGL chunk ({}, {}) draw: {error}", chunk.chunk_x, chunk.chunk_z
+            )))?;
+        }
         if self.debug_visible { self.draw_debug_overlay(&mut target)?; }
         #[cfg(target_os = "android")]
         self.draw_debug_button(&mut target)?;
@@ -577,19 +596,17 @@ fn create_android_display(
     Ok((window, display))
 }
 
-fn sample_world_vertices() -> Vec<Vertex> {
-    // The renderer consumes CPU meshes prepared by Booking. World generation,
-    // block registration and chunk-neighbor meshing stay outside the renderer.
+fn sample_world_meshes() -> Vec<(i32, i32, Vec<Vertex>)> {
+    // Booking owns world generation and CPU meshing. The graphics backend
+    // uploads one independent GPU buffer per loaded chunk section.
     let mut engine = BookingEngine::new();
     engine.generate_prototype_terrain(1);
 
-    let mut vertices = Vec::new();
-    for section in engine.build_loaded_world_meshes() {
+    engine.build_loaded_world_meshes().into_iter().map(|section| {
         let offset_x = section.position.x as f32 * 16.0;
         let offset_z = section.position.z as f32 * 16.0;
         let offset_y = section.section_y as f32 * 16.0;
-
-        vertices.extend(section.mesh.vertices.into_iter().map(|vertex| {
+        let vertices = section.mesh.vertices.into_iter().map(|vertex| {
             let color = match vertex.block_id {
                 BlockId(1) => [0.30, 0.68, 0.24],
                 BlockId(2) => [0.48, 0.31, 0.18],
@@ -606,7 +623,7 @@ fn sample_world_vertices() -> Vec<Vertex> {
                 normal: vertex.normal,
                 color,
             }
-        }));
-    }
-    vertices
+        }).collect();
+        (section.position.x, section.position.z, vertices)
+    }).collect()
 }
