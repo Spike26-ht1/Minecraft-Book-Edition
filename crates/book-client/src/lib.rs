@@ -1,6 +1,6 @@
 #![cfg(target_os = "android")]
 
-use booking_engine::BookingEngine;
+use booking_engine::{BookingEngine, PlayerController, PlayerInput};
 use book_renderer_api::{RenderFrame, RendererBackend};
 use book_renderer_opengl::OpenGlRenderer;
 use glium::winit::event::{ElementState, Event, TouchPhase, WindowEvent};
@@ -154,11 +154,16 @@ pub fn android_main(app: AndroidApp) {
 
     let mut engine = BookingEngine::new();
     engine.generate_prototype_terrain(1);
+    let mut player = PlayerController::spawn(&engine, 0, 0).unwrap_or_default();
     let mut frame = RenderFrame::default();
+    frame.camera.position = player.camera_position();
+    frame.camera.yaw = player.yaw();
+    frame.camera.pitch = player.pitch();
     let mut renderer_state = None;
     let mut pressed_keys = HashSet::new();
     let mut active_touches: HashMap<u64, (f64, f64)> = HashMap::new();
     let mut next_frame_deadline: Option<Instant> = None;
+    let mut last_simulation_tick = Instant::now();
     let result = event_loop.run(move |event, active_loop| match event {
         Event::Resumed => {
             log::info!("Android lifecycle: Resumed");
@@ -269,10 +274,13 @@ pub fn android_main(app: AndroidApp) {
                         }
                         TouchPhase::Moved => {
                             if let Some(previous) = active_touches.insert(touch_id, location) {
-                                frame.camera.look(
+                                player.look(
                                     ((location.0 - previous.0) as f32) * 0.004,
                                     -((location.1 - previous.1) as f32) * 0.004,
                                 );
+                                frame.camera.position = player.camera_position();
+                                frame.camera.yaw = player.yaw();
+                                frame.camera.pitch = player.pitch();
                                 if let Some((window, _)) = renderer_state.as_ref() {
                                     window.request_redraw();
                                 }
@@ -300,20 +308,34 @@ pub fn android_main(app: AndroidApp) {
         }
         Event::AboutToWait => {
             if renderer_state.is_some() {
-                const MOVE_STEP: f32 = 0.22;
                 const LOOK_STEP: f32 = 0.025;
-                if pressed_keys.contains(&KeyCode::KeyW) { frame.camera.move_forward(MOVE_STEP); }
-                if pressed_keys.contains(&KeyCode::KeyS) { frame.camera.move_forward(-MOVE_STEP); }
-                if pressed_keys.contains(&KeyCode::KeyA) { frame.camera.move_right(-MOVE_STEP); }
-                if pressed_keys.contains(&KeyCode::KeyD) { frame.camera.move_right(MOVE_STEP); }
-                if pressed_keys.contains(&KeyCode::Space) { frame.camera.move_vertical(MOVE_STEP); }
-                if pressed_keys.contains(&KeyCode::ShiftLeft) { frame.camera.move_vertical(-MOVE_STEP); }
-                if pressed_keys.contains(&KeyCode::ArrowLeft) { frame.camera.look(-LOOK_STEP, 0.0); }
-                if pressed_keys.contains(&KeyCode::ArrowRight) { frame.camera.look(LOOK_STEP, 0.0); }
-                if pressed_keys.contains(&KeyCode::ArrowUp) { frame.camera.look(0.0, LOOK_STEP); }
-                if pressed_keys.contains(&KeyCode::ArrowDown) { frame.camera.look(0.0, -LOOK_STEP); }
-
                 let now = Instant::now();
+                let delta_seconds = now.duration_since(last_simulation_tick).as_secs_f32();
+                last_simulation_tick = now;
+
+                let forward = (pressed_keys.contains(&KeyCode::KeyW) as i8
+                    - pressed_keys.contains(&KeyCode::KeyS) as i8) as f32;
+                let strafe = (pressed_keys.contains(&KeyCode::KeyD) as i8
+                    - pressed_keys.contains(&KeyCode::KeyA) as i8) as f32;
+                player.update(
+                    &engine,
+                    PlayerInput {
+                        forward,
+                        strafe,
+                        jump: pressed_keys.contains(&KeyCode::Space),
+                        sprint: pressed_keys.contains(&KeyCode::ShiftLeft),
+                    },
+                    delta_seconds,
+                );
+
+                if pressed_keys.contains(&KeyCode::ArrowLeft) { player.look(-LOOK_STEP, 0.0); }
+                if pressed_keys.contains(&KeyCode::ArrowRight) { player.look(LOOK_STEP, 0.0); }
+                if pressed_keys.contains(&KeyCode::ArrowUp) { player.look(0.0, LOOK_STEP); }
+                if pressed_keys.contains(&KeyCode::ArrowDown) { player.look(0.0, -LOOK_STEP); }
+
+                frame.camera.position = player.camera_position();
+                frame.camera.yaw = player.yaw();
+                frame.camera.pitch = player.pitch();
                 let deadline = next_frame_deadline.unwrap_or(now);
                 if now >= deadline {
                     if let Some((window, _)) = renderer_state.as_ref() {
