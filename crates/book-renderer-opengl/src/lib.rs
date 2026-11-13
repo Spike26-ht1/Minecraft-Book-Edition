@@ -260,17 +260,7 @@ impl OpenGlRenderer {
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: building chunk-manager world mesh");
-        let mut chunk_meshes = Vec::new();
-        for (chunk_x, chunk_z, vertices) in sample_world_meshes(engine) {
-            if vertices.is_empty() { continue; }
-            let buffer = VertexBuffer::new(&display, &vertices)
-                .map_err(|error| RendererError::new(format!(
-                    "Chunk ({chunk_x}, {chunk_z}) vertex buffer: {error}"
-                )))?;
-            chunk_meshes.push(ChunkGpuMesh {
-                chunk_x, chunk_z, vertices: buffer,
-            });
-        }
+        let chunk_meshes = upload_chunk_meshes(&display, engine)?;
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: uploading prototype texture atlas");
         let atlas_data = prototype_texture_atlas();
@@ -300,6 +290,15 @@ impl OpenGlRenderer {
             #[cfg(target_os = "android")]
             first_frame_logged: false,
         }))
+    }
+
+    /// Rebuilds GPU chunk buffers after Booking world data has changed.
+    /// This currently refreshes all loaded chunks; dirty-chunk updates will
+    /// narrow the upload work in a later renderer stage.
+    pub fn sync_world(&mut self, engine: &BookingEngine) -> Result<(), RendererError> {
+        self.chunk_meshes = upload_chunk_meshes(&self.display, engine)?;
+        self.visible_chunk_count = 0;
+        Ok(())
     }
 
     pub fn toggle_debug(&mut self) { self.debug_visible = !self.debug_visible; }
@@ -640,6 +639,22 @@ fn create_android_display(
     record_android_diagnostic("Glium: display initialized");
 
     Ok((window, display))
+}
+
+fn upload_chunk_meshes(
+    display: &glium::backend::glutin::Display<WindowSurface>,
+    engine: &BookingEngine,
+) -> Result<Vec<ChunkGpuMesh>, RendererError> {
+    let mut meshes = Vec::new();
+    for (chunk_x, chunk_z, vertices) in sample_world_meshes(engine) {
+        if vertices.is_empty() { continue; }
+        let buffer = VertexBuffer::new(display, &vertices)
+            .map_err(|error| RendererError::new(format!(
+                "Chunk ({chunk_x}, {chunk_z}) vertex buffer: {error}"
+            )))?;
+        meshes.push(ChunkGpuMesh { chunk_x, chunk_z, vertices: buffer });
+    }
+    Ok(meshes)
 }
 
 fn sample_world_meshes(engine: &BookingEngine) -> Vec<(i32, i32, Vec<Vertex>)> {
