@@ -57,3 +57,23 @@ request is never an automatic grant.
 The current `book-mod-api` crate provides shared manifest types and structural
 validation only. It does not yet discover packages, execute scripts, load native
 libraries, resolve semantic-version ranges, or implement registries/events.
+
+
+## Rust mod API surface
+
+The shared API now defines a source-level Rust mod lifecycle:
+
+- `BookMod::on_load` and `BookMod::on_unload` for initialization and cleanup.
+- `BookMod::subscriptions` to declare event kinds the mod wants to receive.
+- `BookMod::on_event` for client, world, tick, and block lifecycle events.
+- `ModContext` for capability-checked block registration and world block access.
+
+A host implementation of `ModContext` must enforce the owning mod's granted
+capabilities on every operation. The API contract itself does not grant
+permissions or expose unrestricted engine internals.
+
+This Rust trait is a source-level API, not a stable ABI for independently
+compiled dynamic libraries. Native modules still need a versioned host ABI;
+WASM and script runtimes should call equivalent host functions through
+capability-limited adapters. The loader/runtime host and concrete context
+implementation are not yet implemented.
