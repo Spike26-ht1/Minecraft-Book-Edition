@@ -8,6 +8,23 @@ impl BlockId {
     pub const AIR: Self = Self(0);
 }
 
+/// A block type and its compact interned state identifier.
+/// State identifiers are resolved through block definitions, keeping each
+/// stored voxel compact while allowing orientation and variant data.
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Hash)]
+pub struct BlockState {
+    pub block: BlockId,
+    pub state: u16,
+}
+
+impl BlockState {
+    pub const AIR: Self = Self { block: BlockId::AIR, state: 0 };
+
+    pub const fn new(block: BlockId, state: u16) -> Self {
+        Self { block, state }
+    }
+}
+
 /// Tile coordinate in a texture atlas, measured in tiles rather than pixels.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct AtlasTile {
