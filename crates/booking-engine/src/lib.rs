@@ -1,11 +1,11 @@
-mod player;
-pub use player::{BlockHit, PlayerController, PlayerInput};
-
 //! Booking is the world and simulation engine for Minecraft Book Edition.
 //!
 //! This crate owns block registries, loaded world state, terrain creation, and
 //! CPU-side chunk mesh preparation. Graphics APIs consume the prepared meshes;
 //! they do not own or generate gameplay world data.
+
+mod player;
+pub use player::{BlockHit, PlayerController, PlayerInput};
 
 use book_core::{AtlasTile, BlockDefinition, BlockId, BlockRegistry};
 use book_meshing::{mesh_chunk_section, ChunkMesh};
