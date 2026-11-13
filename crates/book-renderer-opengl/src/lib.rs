@@ -232,12 +232,13 @@ impl OpenGlRenderer {
         title: &str,
         width: u32,
         height: u32,
+        engine: &BookingEngine,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         let (window, display) = SimpleWindowBuilder::new()
             .with_title(title)
             .with_inner_size(width, height)
             .build(event_loop);
-        Self::from_display(window, display)
+        Self::from_display(window, display, engine)
     }
 
     #[cfg(target_os = "android")]
@@ -246,19 +247,21 @@ impl OpenGlRenderer {
         title: &str,
         _width: u32,
         _height: u32,
+        engine: &BookingEngine,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         let (window, display) = create_android_display(event_loop, title)?;
-        Self::from_display(window, display)
+        Self::from_display(window, display, engine)
     }
 
     fn from_display(
         window: glium::winit::window::Window,
         display: glium::backend::glutin::Display<WindowSurface>,
+        engine: &BookingEngine,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: building chunk-manager world mesh");
         let mut chunk_meshes = Vec::new();
-        for (chunk_x, chunk_z, vertices) in sample_world_meshes() {
+        for (chunk_x, chunk_z, vertices) in sample_world_meshes(engine) {
             if vertices.is_empty() { continue; }
             let buffer = VertexBuffer::new(&display, &vertices)
                 .map_err(|error| RendererError::new(format!(
@@ -639,12 +642,9 @@ fn create_android_display(
     Ok((window, display))
 }
 
-fn sample_world_meshes() -> Vec<(i32, i32, Vec<Vertex>)> {
+fn sample_world_meshes(engine: &BookingEngine) -> Vec<(i32, i32, Vec<Vertex>)> {
     // Booking owns world generation and CPU meshing. The graphics backend
     // uploads one independent GPU buffer per loaded chunk section.
-    let mut engine = BookingEngine::new();
-    engine.generate_prototype_terrain(1);
-
     engine.build_loaded_world_meshes().into_iter().map(|section| {
         let offset_x = section.position.x as f32 * 16.0;
         let offset_z = section.position.z as f32 * 16.0;
