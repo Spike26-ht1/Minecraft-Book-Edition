@@ -1,3 +1,6 @@
+mod player;
+pub use player::{PlayerController, PlayerInput};
+
 //! Booking is the world and simulation engine for Minecraft Book Edition.
 //!
 //! This crate owns block registries, loaded world state, terrain creation, and
