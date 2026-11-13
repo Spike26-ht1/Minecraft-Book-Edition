@@ -3,7 +3,7 @@
 use booking_engine::{BookingEngine, PlayerController, PlayerInput};
 use book_renderer_api::{RenderFrame, RendererBackend};
 use book_renderer_opengl::OpenGlRenderer;
-use glium::winit::event::{ElementState, Event, TouchPhase, WindowEvent};
+use glium::winit::event::{ElementState, Event, MouseButton, TouchPhase, WindowEvent};
 use glium::winit::event_loop::ControlFlow;
 use glium::winit::keyboard::{KeyCode, PhysicalKey};
 use glium::winit::platform::android::activity::AndroidApp;
@@ -162,6 +162,7 @@ pub fn android_main(app: AndroidApp) {
     let mut renderer_state = None;
     let mut pressed_keys = HashSet::new();
     let mut active_touches: HashMap<u64, (f64, f64)> = HashMap::new();
+    let mut touch_start_positions: HashMap<u64, (f64, f64)> = HashMap::new();
     let mut next_frame_deadline: Option<Instant> = None;
     let mut last_simulation_tick = Instant::now();
     let result = event_loop.run(move |event, active_loop| match event {
@@ -256,12 +257,27 @@ pub fn android_main(app: AndroidApp) {
                         }
                     }
                 }
+                WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
+                    if let Some(hit) = engine.raycast_blocks(
+                        player.camera_position(), player.forward(), 6.0,
+                    ) {
+                        if engine.break_block_at(hit.position) {
+                            if let Some((window, renderer)) = renderer_state.as_mut() {
+                                if let Err(error) = renderer.sync_world(&engine) {
+                                    log::error!("World mesh sync after mouse block break failed: {error}");
+                                }
+                                window.request_redraw();
+                            }
+                        }
+                    }
+                }
                 WindowEvent::Touch(touch) => {
                     let touch_id = touch.id;
                     let location = (touch.location.x, touch.location.y);
                     match touch.phase {
                         TouchPhase::Started => {
                             active_touches.insert(touch_id, location);
+                            touch_start_positions.insert(touch_id, location);
                             if let Some((window, renderer)) = renderer_state.as_mut() {
                                 let size = window.inner_size();
                                 if location.0 >= size.width.saturating_sub(96) as f64
@@ -286,8 +302,38 @@ pub fn android_main(app: AndroidApp) {
                                 }
                             }
                         }
-                        TouchPhase::Ended | TouchPhase::Cancelled => {
+                        TouchPhase::Ended => {
                             active_touches.remove(&touch_id);
+                            if let Some(start) = touch_start_positions.remove(&touch_id) {
+                                let dx = location.0 - start.0;
+                                let dy = location.1 - start.1;
+                                let is_tap = dx * dx + dy * dy < 144.0;
+                                let is_debug_area = renderer_state.as_ref()
+                                    .map(|(window, _)| {
+                                        let size = window.inner_size();
+                                        start.0 >= size.width.saturating_sub(96) as f64
+                                            && start.1 <= 64.0
+                                    })
+                                    .unwrap_or(false);
+                                if is_tap && !is_debug_area {
+                                    if let Some(hit) = engine.raycast_blocks(
+                                        player.camera_position(), player.forward(), 6.0,
+                                    ) {
+                                        if engine.break_block_at(hit.position) {
+                                            if let Some((window, renderer)) = renderer_state.as_mut() {
+                                                if let Err(error) = renderer.sync_world(&engine) {
+                                                    log::error!("World mesh sync after block break failed: {error}");
+                                                }
+                                                window.request_redraw();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        TouchPhase::Cancelled => {
+                            active_touches.remove(&touch_id);
+                            touch_start_positions.remove(&touch_id);
                         }
                     }
                 }
