@@ -1,6 +1,6 @@
 use booking_engine::BookingEngine;
 use book_core::BlockId;
-use book_renderer_api::{GraphicsApi, RendererBackend, RendererError, RendererInfo, RenderFrame};
+use book_renderer_api::{CameraState, GraphicsApi, RendererBackend, RendererError, RendererInfo, RenderFrame};
 #[cfg(not(target_os = "android"))]
 use glium::backend::glutin::SimpleWindowBuilder;
 #[cfg(target_os = "android")]
@@ -392,7 +392,7 @@ impl RendererBackend for OpenGlRenderer {
             ..DrawParameters::default()
         };
         let (width, height) = self.display.get_framebuffer_dimensions();
-        let view_projection = voxel_camera_matrix(width as f32 / height.max(1) as f32);
+        let view_projection = voxel_camera_matrix(width as f32 / height.max(1) as f32, frame.camera);
         for chunk in &self.chunk_meshes {
             target.draw(
                 &chunk.vertices,
@@ -432,10 +432,9 @@ fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 
 /// Perspective camera aimed at the center of the procedural voxel showcase.
 /// Matrices are column-major to match GLSL uniforms.
-fn voxel_camera_matrix(aspect: f32) -> [[f32; 4]; 4] {
-    let eye = [39.0, 19.0, 43.0];
-    let target = [24.0, 2.0, 24.0];
-    let forward = normalize3([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
+fn voxel_camera_matrix(aspect: f32, camera: CameraState) -> [[f32; 4]; 4] {
+    let eye = camera.position;
+    let forward = normalize3(camera.forward());
     let side = normalize3(cross3(forward, [0.0, 1.0, 0.0]));
     let up = cross3(side, forward);
     let view = [
@@ -444,9 +443,9 @@ fn voxel_camera_matrix(aspect: f32) -> [[f32; 4]; 4] {
         [side[2], up[2], -forward[2], 0.0],
         [-dot3(side, eye), -dot3(up, eye), dot3(forward, eye), 1.0],
     ];
-    let near = 0.1_f32;
-    let far = 128.0_f32;
-    let focal = 1.0 / (std::f32::consts::FRAC_PI_3 * 0.5).tan();
+    let near = camera.near_plane.max(0.01);
+    let far = camera.far_plane.max(near + 1.0);
+    let focal = 1.0 / (camera.vertical_fov_radians.clamp(0.2, 2.8) * 0.5).tan();
     let projection = [
         [focal / aspect.max(0.1), 0.0, 0.0, 0.0],
         [0.0, focal, 0.0, 0.0],
