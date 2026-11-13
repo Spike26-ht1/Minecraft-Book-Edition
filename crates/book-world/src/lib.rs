@@ -57,9 +57,97 @@ impl ChunkSection {
     }
 }
 
+
+/// A vertical column of 16 × 16 sections at one horizontal chunk position.
+/// Section coordinates use Euclidean division, so negative world heights map
+/// to the correct section and local block coordinate.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChunkColumn {
+    pub position: ChunkPos,
+    sections: std::collections::BTreeMap<i32, ChunkSection>,
+}
+
+impl ChunkColumn {
+    pub fn new(position: ChunkPos) -> Self {
+        Self {
+            position,
+            sections: std::collections::BTreeMap::new(),
+        }
+    }
+
+    pub fn section(&self, section_y: i32) -> Option<&ChunkSection> {
+        self.sections.get(&section_y)
+    }
+
+    pub fn section_mut(&mut self, section_y: i32) -> &mut ChunkSection {
+        self.sections.entry(section_y).or_default()
+    }
+
+    pub fn section_count(&self) -> usize {
+        self.sections.len()
+    }
+
+    /// Reads a block using local X/Z coordinates and absolute world Y.
+    pub fn get_block(&self, local_x: usize, world_y: i32, local_z: usize) -> Option<BlockId> {
+        if local_x >= SECTION_EDGE || local_z >= SECTION_EDGE {
+            return None;
+        }
+
+        let section_y = world_y.div_euclid(SECTION_EDGE as i32);
+        let local_y = world_y.rem_euclid(SECTION_EDGE as i32) as usize;
+        self.sections.get(&section_y)?.get(local_x, local_y, local_z)
+    }
+
+    /// Writes a block using local X/Z coordinates and absolute world Y.
+    /// Returns false when X or Z is outside this column.
+    pub fn set_block(
+        &mut self,
+        local_x: usize,
+        world_y: i32,
+        local_z: usize,
+        block: BlockId,
+    ) -> bool {
+        if local_x >= SECTION_EDGE || local_z >= SECTION_EDGE {
+            return false;
+        }
+
+        let section_y = world_y.div_euclid(SECTION_EDGE as i32);
+        let local_y = world_y.rem_euclid(SECTION_EDGE as i32) as usize;
+        self.section_mut(section_y).set(local_x, local_y, local_z, block)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    #[test]
+    fn column_stores_blocks_across_vertical_sections() {
+        let mut column = ChunkColumn::new(ChunkPos { x: 2, z: -3 });
+        assert!(column.set_block(4, 17, 5, BlockId(9)));
+        assert_eq!(column.get_block(4, 17, 5), Some(BlockId(9)));
+        assert_eq!(column.section_count(), 1);
+        assert!(column.section(1).is_some());
+    }
+
+    #[test]
+    fn column_maps_negative_world_heights_correctly() {
+        let mut column = ChunkColumn::new(ChunkPos::default());
+        assert!(column.set_block(1, -1, 2, BlockId(4)));
+        assert!(column.set_block(1, -16, 2, BlockId(5)));
+        assert_eq!(column.get_block(1, -1, 2), Some(BlockId(4)));
+        assert_eq!(column.get_block(1, -16, 2), Some(BlockId(5)));
+        assert!(column.section(-1).is_some());
+    }
+
+    #[test]
+    fn column_rejects_horizontal_coordinates_outside_chunk() {
+        let mut column = ChunkColumn::new(ChunkPos::default());
+        assert!(!column.set_block(16, 0, 0, BlockId(1)));
+        assert_eq!(column.get_block(0, 0, 16), None);
+        assert_eq!(column.section_count(), 0);
+    }
 
     #[test]
     fn new_section_is_filled_with_air() {
