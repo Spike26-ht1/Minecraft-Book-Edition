@@ -1,3 +1,4 @@
+use book_assets::{TextureAtlas, TextureImage};
 use booking_engine::BookingEngine;
 use book_core::BlockId;
 use book_renderer_api::{CameraState, GraphicsApi, RendererBackend, RendererError, RendererInfo, RenderFrame};
@@ -20,6 +21,7 @@ use raw_window_handle::HasWindowHandle;
 #[cfg(target_os = "android")]
 use std::num::NonZeroU32;
 use glium::index::NoIndices;
+use glium::texture::{RawImage2d, Texture2d};
 use glium::uniform;
 use glium::{implement_vertex, Blend, Depth, DepthTest, DrawParameters, Program, Surface, VertexBuffer};
 use glutin::surface::WindowSurface;
@@ -102,12 +104,14 @@ precision highp float;
 in vec2 v_uv;
 in vec3 v_normal;
 in vec3 v_color;
+uniform sampler2D u_atlas;
 out vec4 out_color;
 void main() {
     vec3 sun_direction = normalize(vec3(-0.4, 0.8, -0.3));
     float diffuse = max(dot(normalize(v_normal), sun_direction), 0.0);
     float lighting = 0.42 + diffuse * 0.58;
-    out_color = vec4(v_color * lighting, 1.0);
+    vec4 texel = texture(u_atlas, v_uv);
+    out_color = vec4(texel.rgb * v_color * lighting, texel.a);
 }
 "#;
 
@@ -205,6 +209,7 @@ pub struct OpenGlRenderer {
     display: glium::backend::glutin::Display<WindowSurface>,
     chunk_meshes: Vec<ChunkGpuMesh>,
     program: Program,
+    atlas: Texture2d,
     debug_program: Program,
     last_frame: Instant,
     fps_window_started: Instant,
@@ -261,6 +266,15 @@ impl OpenGlRenderer {
             });
         }
         #[cfg(target_os = "android")]
+        record_android_diagnostic("Renderer: uploading prototype texture atlas");
+        let atlas_data = prototype_texture_atlas();
+        let raw_atlas = RawImage2d::from_raw_rgba_reversed(
+            &atlas_data.rgba,
+            (atlas_data.width, atlas_data.height),
+        );
+        let atlas = Texture2d::new(&display, raw_atlas)
+            .map_err(|error| RendererError::new(format!("Texture atlas upload: {error}")))?;
+        #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: compiling chunk shader program");
         let program = Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None)
             .map_err(|error| RendererError::new(format!("Chunk shader program: {error}")))?;
@@ -273,7 +287,7 @@ impl OpenGlRenderer {
         record_android_diagnostic("Renderer: GPU resources and shader programs are ready");
         let now = Instant::now();
         Ok((window, Self {
-            display, chunk_meshes, program, debug_program,
+            display, chunk_meshes, program, atlas, debug_program,
             last_frame: now, fps_window_started: now,
             frames_in_window: 0, fps: 0, last_frame_ms: 0.0, debug_visible: false,
             visible_chunk_count: 0,
@@ -411,7 +425,7 @@ impl RendererBackend for OpenGlRenderer {
                 &chunk.vertices,
                 NoIndices(glium::index::PrimitiveType::TrianglesList),
                 &self.program,
-                &uniform! { u_view_projection: view_projection },
+                &uniform! { u_view_projection: view_projection, u_atlas: self.atlas.sampled() },
                 &parameters,
             ).map_err(|error| RendererError::new(format!(
                 "OpenGL chunk ({}, {}) draw: {error}", chunk.chunk_x, chunk.chunk_z
@@ -650,4 +664,32 @@ fn sample_world_meshes() -> Vec<(i32, i32, Vec<Vertex>)> {
         }).collect();
         (section.position.x, section.position.z, vertices)
     }).collect()
+fn prototype_texture_atlas() -> TextureAtlas {
+    fn image(key: &str, base: [u8; 3], seed: u32) -> TextureImage {
+        let mut rgba = Vec::with_capacity(16 * 16 * 4);
+        for y in 0..16_u32 {
+            for x in 0..16_u32 {
+                let variation = ((x * 7 + y * 11 + seed * 13) % 17) as i16 - 8;
+                for channel in base {
+                    rgba.push((channel as i16 + variation).clamp(0, 255) as u8);
+                }
+                rgba.push(255);
+            }
+        }
+        TextureImage {
+            key: key.to_owned(), width: 16, height: 16, rgba,
+        }
+    }
+
+    TextureAtlas::build_grid(
+        vec![
+            image("book:grass_block", [72, 148, 54], 1),
+            image("book:dirt", [116, 76, 45], 2),
+            image("book:stone", [126, 130, 134], 3),
+        ],
+        16,
+        16,
+    ).expect("built-in prototype texture atlas must be valid")
+}
+
 }
