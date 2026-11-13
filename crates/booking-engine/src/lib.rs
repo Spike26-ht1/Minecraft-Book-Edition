@@ -174,6 +174,7 @@ fn lattice_value(x: i32, z: i32) -> f32 {
     value ^= value >> 13;
     value = value.wrapping_mul(0x85eb_ca6b);
     value ^= value >> 16;
+    value = value.wrapping_add(0x9e37_79b9);
     (value as f32 / u32::MAX as f32) * 2.0 - 1.0
 }
 
