@@ -5,6 +5,7 @@ use book_world::{ChunkManager, ChunkPos, ChunkSection, SECTION_EDGE};
 pub struct MeshVertex {
     pub position: [f32; 3],
     pub uv: [f32; 2],
+    pub normal: [f32; 3],
     pub block_id: BlockId,
 }
 
@@ -96,6 +97,7 @@ pub fn mesh_section_with_neighbors(
                         mesh.vertices.push(MeshVertex {
                             position: [px + p[0], py + p[1], pz + p[2]],
                             uv: uvs[index],
+                            normal: face.normal,
                             block_id,
                         });
                     }
@@ -180,12 +182,14 @@ fn neighbor_is_solid(
 
 struct Face {
     neighbor: [i32; 3],
+    normal: [f32; 3],
     positions: [[f32; 3]; 6],
 }
 
 const FACES: [Face; 6] = [
     Face {
         neighbor: [0, 0, -1],
+        normal: [0.0, 0.0, -1.0],
         positions: [
             [0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [1.0, 0.0, 0.0],
             [0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [1.0, 1.0, 0.0],
@@ -193,6 +197,7 @@ const FACES: [Face; 6] = [
     },
     Face {
         neighbor: [0, 0, 1],
+        normal: [0.0, 0.0, 1.0],
         positions: [
             [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0],
             [0.0, 0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
@@ -200,6 +205,7 @@ const FACES: [Face; 6] = [
     },
     Face {
         neighbor: [-1, 0, 0],
+        normal: [-1.0, 0.0, 0.0],
         positions: [
             [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 1.0],
             [0.0, 0.0, 0.0], [0.0, 1.0, 1.0], [0.0, 1.0, 0.0],
@@ -207,6 +213,7 @@ const FACES: [Face; 6] = [
     },
     Face {
         neighbor: [1, 0, 0],
+        normal: [1.0, 0.0, 0.0],
         positions: [
             [1.0, 0.0, 0.0], [1.0, 1.0, 1.0], [1.0, 0.0, 1.0],
             [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0],
@@ -214,6 +221,7 @@ const FACES: [Face; 6] = [
     },
     Face {
         neighbor: [0, -1, 0],
+        normal: [0.0, -1.0, 0.0],
         positions: [
             [0.0, 0.0, 0.0], [1.0, 0.0, 1.0], [1.0, 0.0, 0.0],
             [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 1.0],
@@ -221,6 +229,7 @@ const FACES: [Face; 6] = [
     },
     Face {
         neighbor: [0, 1, 0],
+        normal: [0.0, 1.0, 0.0],
         positions: [
             [0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0],
             [0.0, 1.0, 0.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
