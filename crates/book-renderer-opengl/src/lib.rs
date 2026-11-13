@@ -363,10 +363,22 @@ impl OpenGlRenderer {
 
 impl RendererBackend for OpenGlRenderer {
     fn info(&self) -> RendererInfo {
+        #[cfg(target_os = "android")]
+        let (name, api, api_version) = (
+            "Booking Mobile Renderer",
+            GraphicsApi::OpenGlEs,
+            "OpenGL ES 3.0 / GLSL ES 3.00",
+        );
+        #[cfg(not(target_os = "android"))]
+        let (name, api, api_version) = (
+            "Booking Desktop Renderer",
+            GraphicsApi::OpenGl,
+            "OpenGL via Glium/Glutin",
+        );
         RendererInfo {
-            name: "Book OpenGL Chunk Renderer".to_owned(),
-            api: GraphicsApi::OpenGl,
-            api_version: "OpenGL via Glium/Glutin".to_owned(),
+            name: name.to_owned(),
+            api,
+            api_version: api_version.to_owned(),
         }
     }
 
