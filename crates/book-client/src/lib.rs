@@ -168,9 +168,10 @@ pub fn android_main(app: AndroidApp) {
                     Err(error) => {
                         log::error!("OpenGL ES renderer initialization failed: {error}");
                         book_renderer_opengl::record_android_diagnostic(
-                            &format!("Renderer ERROR: initialization failed: {error}"),
+                            &format!(
+                                "Renderer ERROR: initialization failed; keeping Android event loop alive and waiting for the next resume: {error}"
+                            ),
                         );
-                        active_loop.exit();
                     }
                 }
             }
@@ -183,21 +184,31 @@ pub fn android_main(app: AndroidApp) {
             renderer_state = None;
         }
         Event::WindowEvent { window_id, event } => {
-            if let Some((window, renderer)) = renderer_state.as_mut() {
-                if window.id() != window_id { return; }
-                match event {
-                    WindowEvent::CloseRequested => {
-                        log::info!("Android window requested close");
-                        active_loop.exit();
-                    }
-                    WindowEvent::KeyboardInput { event, .. }
-                        if event.state == ElementState::Pressed
-                            && event.physical_key == PhysicalKey::Code(KeyCode::F3) =>
-                    {
+            let window_matches = renderer_state
+                .as_ref()
+                .map(|(window, _)| window.id() == window_id)
+                .unwrap_or(false);
+            if !window_matches { return; }
+
+            match event {
+                WindowEvent::CloseRequested => {
+                    log::info!("Android window requested close; releasing renderer");
+                    book_renderer_opengl::record_android_diagnostic(
+                        "Android window close requested; renderer released without ending the event loop",
+                    );
+                    renderer_state = None;
+                }
+                WindowEvent::KeyboardInput { event, .. }
+                    if event.state == ElementState::Pressed
+                        && event.physical_key == PhysicalKey::Code(KeyCode::F3) =>
+                {
+                    if let Some((window, renderer)) = renderer_state.as_mut() {
                         renderer.toggle_debug();
                         window.request_redraw();
                     }
-                    WindowEvent::Touch(touch) if touch.phase == TouchPhase::Started => {
+                }
+                WindowEvent::Touch(touch) if touch.phase == TouchPhase::Started => {
+                    if let Some((window, renderer)) = renderer_state.as_mut() {
                         let size = window.inner_size();
                         if touch.location.x >= size.width.saturating_sub(96) as f64
                             && touch.location.y <= 64.0
@@ -206,14 +217,20 @@ pub fn android_main(app: AndroidApp) {
                             window.request_redraw();
                         }
                     }
-                    WindowEvent::RedrawRequested => {
-                        if let Err(error) = renderer.render(&frame) {
-                            log::error!("Android renderer frame failed: {error}");
-                            active_loop.exit();
-                        }
-                    }
-                    _ => {}
                 }
+                WindowEvent::RedrawRequested => {
+                    let render_result = renderer_state
+                        .as_mut()
+                        .map(|(_, renderer)| renderer.render(&frame));
+                    if let Some(Err(error)) = render_result {
+                        log::error!("Android renderer frame failed: {error}");
+                        book_renderer_opengl::record_android_diagnostic(
+                            &format!("Renderer ERROR: frame failed; renderer released: {error}"),
+                        );
+                        renderer_state = None;
+                    }
+                }
+                _ => {}
             }
         }
         Event::AboutToWait => {

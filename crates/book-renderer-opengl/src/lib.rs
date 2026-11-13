@@ -79,8 +79,7 @@ pub fn record_android_diagnostic(message: &str) {
 
 
 #[cfg(target_os = "android")]
-const VERTEX_SHADER: &str = r#"
-#version 300 es
+const VERTEX_SHADER: &str = r#"#version 300 es
 precision highp float;
 in vec3 position;
 in vec2 uv;
@@ -100,8 +99,7 @@ void main() {
 "#;
 
 #[cfg(target_os = "android")]
-const FRAGMENT_SHADER: &str = r#"
-#version 300 es
+const FRAGMENT_SHADER: &str = r#"#version 300 es
 precision highp float;
 in vec2 v_uv;
 out vec4 out_color;
@@ -112,8 +110,7 @@ void main() {
 "#;
 
 #[cfg(target_os = "android")]
-const DEBUG_VERTEX_SHADER: &str = r#"
-#version 300 es
+const DEBUG_VERTEX_SHADER: &str = r#"#version 300 es
 precision highp float;
 in vec2 position;
 in vec4 color;
@@ -128,8 +125,7 @@ void main() {
 "#;
 
 #[cfg(target_os = "android")]
-const DEBUG_FRAGMENT_SHADER: &str = r#"
-#version 300 es
+const DEBUG_FRAGMENT_SHADER: &str = r#"#version 300 es
 precision highp float;
 in vec4 v_color;
 out vec4 out_color;
@@ -145,8 +141,7 @@ struct DebugVertex { position: [f32; 2], color: [f32; 4] }
 implement_vertex!(DebugVertex, position, color);
 
 #[cfg(not(target_os = "android"))]
-const VERTEX_SHADER: &str = r#"
-#version 140
+const VERTEX_SHADER: &str = r#"#version 140
 in vec3 position;
 in vec2 uv;
 out vec2 v_uv;
@@ -165,8 +160,7 @@ void main() {
 "#;
 
 #[cfg(not(target_os = "android"))]
-const FRAGMENT_SHADER: &str = r#"
-#version 140
+const FRAGMENT_SHADER: &str = r#"#version 140
 in vec2 v_uv;
 out vec4 out_color;
 void main() {
@@ -176,8 +170,7 @@ void main() {
 "#;
 
 #[cfg(not(target_os = "android"))]
-const DEBUG_VERTEX_SHADER: &str = r#"
-#version 140
+const DEBUG_VERTEX_SHADER: &str = r#"#version 140
 in vec2 position;
 in vec4 color;
 out vec4 v_color;
@@ -191,8 +184,7 @@ void main() {
 "#;
 
 #[cfg(not(target_os = "android"))]
-const DEBUG_FRAGMENT_SHADER: &str = r#"
-#version 140
+const DEBUG_FRAGMENT_SHADER: &str = r#"#version 140
 in vec4 v_color;
 out vec4 out_color;
 void main() { out_color = v_color; }
