@@ -669,6 +669,8 @@ fn sample_world_meshes() -> Vec<(i32, i32, Vec<Vertex>)> {
         }).collect();
         (section.position.x, section.position.z, vertices)
     }).collect()
+}
+
 fn prototype_texture_atlas() -> TextureAtlas {
     fn image(key: &str, base: [u8; 3], seed: u32) -> TextureImage {
         let mut rgba = Vec::with_capacity(16 * 16 * 4);
@@ -695,6 +697,4 @@ fn prototype_texture_atlas() -> TextureAtlas {
         16,
         16,
     ).expect("built-in prototype texture atlas must be valid")
-}
-
 }
