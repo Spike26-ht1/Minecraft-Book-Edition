@@ -153,7 +153,7 @@ pub fn android_main(app: AndroidApp) {
     };
 
     let mut engine = BookingEngine::new();
-    engine.generate_prototype_terrain(1);
+    engine.generate_prototype_terrain(4);
     let mut player = PlayerController::spawn(&engine, 0, 0).unwrap_or_default();
     let mut frame = RenderFrame::default();
     frame.camera.position = player.camera_position();
