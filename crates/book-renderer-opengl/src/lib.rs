@@ -26,6 +26,7 @@ use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 use glium::uniform;
 use glium::{implement_vertex, Blend, Depth, DepthTest, DrawParameters, Program, Surface, VertexBuffer};
 use glutin::surface::WindowSurface;
+use std::collections::BTreeMap;
 use std::time::Instant;
 
 #[cfg(target_os = "android")]
@@ -414,7 +415,7 @@ impl RendererBackend for OpenGlRenderer {
         };
         let (width, height) = self.display.get_framebuffer_dimensions();
         let view_projection = voxel_camera_matrix(width as f32 / height.max(1) as f32, frame.camera);
-        let render_distance = 8.0_f32 * 16.0;
+        let render_distance = 4.0_f32 * 16.0;
         let render_distance_squared = render_distance * render_distance;
         self.visible_chunk_count = 0;
         for chunk in &self.chunk_meshes {
@@ -658,13 +659,17 @@ fn upload_chunk_meshes(
 }
 
 fn sample_world_meshes(engine: &BookingEngine) -> Vec<(i32, i32, Vec<Vertex>)> {
-    // Booking owns world generation and CPU meshing. The graphics backend
-    // uploads one independent GPU buffer per loaded chunk section.
-    engine.build_loaded_world_meshes().into_iter().map(|section| {
+    // Merge every vertical section into one GPU buffer per chunk column.
+    // This reduces draw calls substantially on mobile GPUs.
+    let mut chunk_vertices: BTreeMap<(i32, i32), Vec<Vertex>> = BTreeMap::new();
+    for section in engine.build_loaded_world_meshes() {
         let offset_x = section.position.x as f32 * 16.0;
         let offset_z = section.position.z as f32 * 16.0;
         let offset_y = section.section_y as f32 * 16.0;
-        let vertices = section.mesh.vertices.into_iter().map(|vertex| {
+        let vertices = chunk_vertices
+            .entry((section.position.x, section.position.z))
+            .or_default();
+        for vertex in section.mesh.vertices {
             let color = match vertex.block_id {
                 BlockId(1) => [0.30, 0.68, 0.24],
                 BlockId(2) => [0.48, 0.31, 0.18],
@@ -672,7 +677,7 @@ fn sample_world_meshes(engine: &BookingEngine) -> Vec<(i32, i32, Vec<Vertex>)> {
                 BlockId(4) => [0.24, 0.25, 0.27],
                 _ => [1.0, 0.0, 1.0],
             };
-            Vertex {
+            vertices.push(Vertex {
                 position: [
                     vertex.position[0] + offset_x,
                     vertex.position[1] + offset_y,
@@ -681,10 +686,12 @@ fn sample_world_meshes(engine: &BookingEngine) -> Vec<(i32, i32, Vec<Vertex>)> {
                 uv: vertex.uv,
                 normal: vertex.normal,
                 color,
-            }
-        }).collect();
-        (section.position.x, section.position.z, vertices)
-    }).collect()
+            });
+        }
+    }
+    chunk_vertices.into_iter()
+        .map(|((chunk_x, chunk_z), vertices)| (chunk_x, chunk_z, vertices))
+        .collect()
 }
 
 fn prototype_texture_atlas() -> TextureAtlas {
