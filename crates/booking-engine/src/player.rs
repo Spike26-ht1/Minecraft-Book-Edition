@@ -69,6 +69,23 @@ impl PlayerController {
         [self.yaw.cos() * horizontal, self.pitch.sin(), self.yaw.sin() * horizontal]
     }
 
+    /// Returns true when a unit block would overlap the player's collision box.
+    pub fn intersects_block(&self, block: [i32; 3]) -> bool {
+        let min = [
+            self.position[0] - PLAYER_RADIUS,
+            self.position[1],
+            self.position[2] - PLAYER_RADIUS,
+        ];
+        let max = [
+            self.position[0] + PLAYER_RADIUS,
+            self.position[1] + PLAYER_HEIGHT,
+            self.position[2] + PLAYER_RADIUS,
+        ];
+        (block[0] as f32) < max[0] && (block[0] as f32 + 1.0) > min[0]
+            && (block[1] as f32) < max[1] && (block[1] as f32 + 1.0) > min[1]
+            && (block[2] as f32) < max[2] && (block[2] as f32 + 1.0) > min[2]
+    }
+
     pub fn camera_position(&self) -> [f32; 3] {
         [self.position[0], self.position[1] + EYE_HEIGHT, self.position[2]]
     }
