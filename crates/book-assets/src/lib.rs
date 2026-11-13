@@ -117,10 +117,11 @@ impl TextureAtlas {
             let offset_y = tile_y as u32 * tile_height;
 
             for row in 0..image.height {
-                let source_start = (row * image.width * 4) as usize;
-                let source_end = source_start + (image.width * 4) as usize;
-                let destination_start = ((offset_y + row) * width + offset_x) as usize * 4;
-                let destination_end = destination_start + (image.width * 4) as usize;
+                let source_start = row as usize * image.width as usize * 4;
+                let source_end = source_start + image.width as usize * 4;
+                let destination_start = ((offset_y as usize + row as usize) * width as usize
+                    + offset_x as usize) * 4;
+                let destination_end = destination_start + image.width as usize * 4;
                 rgba[destination_start..destination_end]
                     .copy_from_slice(&image.rgba[source_start..source_end]);
             }
