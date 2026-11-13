@@ -228,12 +228,9 @@ impl BookingEngine {
         let direction = [direction[0] / length, direction[1] / length, direction[2] / length];
         let mut cell = [origin[0].floor() as i32, origin[1].floor() as i32, origin[2].floor() as i32];
         let mut previous = cell;
-        let step = [
-            direction[0].total_cmp(&0.0) as i32,
-            direction[1].total_cmp(&0.0) as i32,
-            direction[2].total_cmp(&0.0) as i32,
-        ];
-        let step = step.map(|value| match value { -1 => -1, 1 => 1, _ => 0 });
+        let step = direction.map(|value| {
+            if value > 0.0 { 1 } else if value < 0.0 { -1 } else { 0 }
+        });
         let delta = direction.map(|value| if value.abs() <= f32::EPSILON { f32::INFINITY } else { 1.0 / value.abs() });
         let mut max_t = [0.0; 3];
         for axis in 0..3 {
