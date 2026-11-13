@@ -4,7 +4,7 @@ pub const SECTION_EDGE: usize = 16;
 pub const SECTION_VOLUME: usize = SECTION_EDGE * SECTION_EDGE * SECTION_EDGE;
 
 /// Integer coordinates identifying a chunk column in the world.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ChunkPos {
     pub x: i32,
     pub z: i32,
@@ -170,5 +170,153 @@ mod tests {
 
         assert!(!section.set(16, 0, 0, BlockId(1)));
         assert_eq!(section.get(16, 0, 0), None);
+    }
+}
+
+
+/// Manages the set of currently loaded chunk columns.
+///
+/// World X/Z coordinates are mapped with Euclidean division, which keeps
+/// local coordinates in the 0..16 range even for negative positions.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ChunkManager {
+    columns: std::collections::BTreeMap<ChunkPos, ChunkColumn>,
+}
+
+impl ChunkManager {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Converts absolute block coordinates to a chunk position and local X/Z.
+    pub fn locate(world_x: i32, world_z: i32) -> (ChunkPos, usize, usize) {
+        let edge = SECTION_EDGE as i32;
+        let chunk_x = world_x.div_euclid(edge);
+        let chunk_z = world_z.div_euclid(edge);
+        let local_x = world_x.rem_euclid(edge) as usize;
+        let local_z = world_z.rem_euclid(edge) as usize;
+
+        (ChunkPos { x: chunk_x, z: chunk_z }, local_x, local_z)
+    }
+
+    /// Inserts a loaded column, returning the previous column at that position.
+    pub fn insert_column(&mut self, column: ChunkColumn) -> Option<ChunkColumn> {
+        self.columns.insert(column.position, column)
+    }
+
+    pub fn column(&self, position: ChunkPos) -> Option<&ChunkColumn> {
+        self.columns.get(&position)
+    }
+
+    pub fn column_mut(&mut self, position: ChunkPos) -> Option<&mut ChunkColumn> {
+        self.columns.get_mut(&position)
+    }
+
+    pub fn remove_column(&mut self, position: ChunkPos) -> Option<ChunkColumn> {
+        self.columns.remove(&position)
+    }
+
+    pub fn loaded_count(&self) -> usize {
+        self.columns.len()
+    }
+
+    pub fn is_loaded(&self, position: ChunkPos) -> bool {
+        self.columns.contains_key(&position)
+    }
+
+    /// Reads an absolute world block position.
+    /// Returns None if its chunk or vertical section is not loaded.
+    pub fn get_block(&self, world_x: i32, world_y: i32, world_z: i32) -> Option<BlockId> {
+        let (position, local_x, local_z) = Self::locate(world_x, world_z);
+        self.columns.get(&position)?.get_block(local_x, world_y, local_z)
+    }
+
+    /// Writes an absolute world block position.
+    /// Returns false when the corresponding chunk column is not loaded.
+    pub fn set_block(
+        &mut self,
+        world_x: i32,
+        world_y: i32,
+        world_z: i32,
+        block: BlockId,
+    ) -> bool {
+        let (position, local_x, local_z) = Self::locate(world_x, world_z);
+        let Some(column) = self.columns.get_mut(&position) else {
+            return false;
+        };
+
+        column.set_block(local_x, world_y, local_z, block)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&ChunkPos, &ChunkColumn)> {
+        self.columns.iter()
+    }
+}
+
+
+#[cfg(test)]
+mod manager_tests {
+    use super::*;
+
+    #[test]
+    fn locate_maps_positive_and_negative_world_coordinates() {
+        assert_eq!(
+            ChunkManager::locate(16, 31),
+            (ChunkPos { x: 1, z: 1 }, 0, 15)
+        );
+        assert_eq!(
+            ChunkManager::locate(-1, -16),
+            (ChunkPos { x: -1, z: -1 }, 15, 0)
+        );
+        assert_eq!(
+            ChunkManager::locate(-17, 16),
+            (ChunkPos { x: -2, z: 1 }, 15, 0)
+        );
+    }
+
+    #[test]
+    fn manager_reads_and_writes_across_chunk_boundaries() {
+        let mut manager = ChunkManager::new();
+        manager.insert_column(ChunkColumn::new(ChunkPos { x: 0, z: 0 }));
+        manager.insert_column(ChunkColumn::new(ChunkPos { x: -1, z: 0 }));
+
+        assert!(manager.set_block(15, 4, 2, BlockId(3)));
+        assert!(manager.set_block(16, 4, 2, BlockId(4)));
+        assert!(manager.set_block(-1, 4, 2, BlockId(5)));
+
+        assert_eq!(manager.get_block(15, 4, 2), Some(BlockId(3)));
+        assert_eq!(manager.get_block(16, 4, 2), None);
+        assert_eq!(manager.get_block(-1, 4, 2), Some(BlockId(5)));
+    }
+
+    #[test]
+    fn manager_does_not_create_missing_columns_implicitly() {
+        let mut manager = ChunkManager::new();
+
+        assert_eq!(manager.get_block(0, 0, 0), None);
+        assert!(!manager.set_block(0, 0, 0, BlockId(1)));
+        assert_eq!(manager.loaded_count(), 0);
+    }
+
+    #[test]
+    fn manager_replaces_and_removes_columns() {
+        let mut manager = ChunkManager::new();
+        let position = ChunkPos { x: 2, z: -3 };
+
+        assert!(manager.insert_column(ChunkColumn::new(position)).is_none());
+        assert!(manager.insert_column(ChunkColumn::new(position)).is_some());
+        assert_eq!(manager.loaded_count(), 1);
+        assert!(manager.remove_column(position).is_some());
+        assert_eq!(manager.loaded_count(), 0);
+    }
+
+    #[test]
+    fn manager_iteration_is_in_chunk_position_order() {
+        let mut manager = ChunkManager::new();
+        manager.insert_column(ChunkColumn::new(ChunkPos { x: 2, z: 0 }));
+        manager.insert_column(ChunkColumn::new(ChunkPos { x: -1, z: 0 }));
+
+        let positions: Vec<_> = manager.iter().map(|(position, _)| position.x).collect();
+        assert_eq!(positions, vec![-1, 2]);
     }
 }
