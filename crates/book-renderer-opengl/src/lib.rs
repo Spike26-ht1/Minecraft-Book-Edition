@@ -83,13 +83,16 @@ const VERTEX_SHADER: &str = r#"#version 300 es
 precision highp float;
 in vec3 position;
 in vec2 uv;
+in vec3 normal;
 in vec3 color;
 out vec2 v_uv;
+out vec3 v_normal;
 out vec3 v_color;
 uniform mat4 u_view_projection;
 void main() {
     gl_Position = u_view_projection * vec4(position, 1.0);
     v_uv = uv;
+    v_normal = normal;
     v_color = color;
 }
 "#;
@@ -98,11 +101,14 @@ void main() {
 const FRAGMENT_SHADER: &str = r#"#version 300 es
 precision highp float;
 in vec2 v_uv;
+in vec3 v_normal;
 in vec3 v_color;
 out vec4 out_color;
 void main() {
-    float texture_hint = 0.97 + fract(v_uv.x * 16.0) * 0.03;
-    out_color = vec4(v_color * texture_hint, 1.0);
+    vec3 sun_direction = normalize(vec3(-0.4, 0.8, -0.3));
+    float diffuse = max(dot(normalize(v_normal), sun_direction), 0.0);
+    float lighting = 0.42 + diffuse * 0.58;
+    out_color = vec4(v_color * lighting, 1.0);
 }
 "#;
 
@@ -130,8 +136,8 @@ void main() { out_color = v_color; }
 "#;
 
 #[derive(Clone, Copy)]
-struct Vertex { position: [f32; 3], uv: [f32; 2], color: [f32; 3] }
-implement_vertex!(Vertex, position, uv, color);
+struct Vertex { position: [f32; 3], uv: [f32; 2], normal: [f32; 3], color: [f32; 3] }
+implement_vertex!(Vertex, position, uv, normal, color);
 
 #[derive(Clone, Copy)]
 struct DebugVertex { position: [f32; 2], color: [f32; 4] }
@@ -634,6 +640,7 @@ fn sample_world_vertices() -> Vec<Vertex> {
                     vertex.position[2] + offset_z,
                 ],
                 uv: vertex.uv,
+                normal: vertex.normal,
                 color,
             }
         }));
