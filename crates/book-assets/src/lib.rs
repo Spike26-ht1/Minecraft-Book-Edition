@@ -22,6 +22,19 @@ pub struct TextureEntry {
     pub textures: serde_json::Value,
 }
 
+impl TextureEntry {
+    pub fn primary_path(&self) -> Option<&str> {
+        match &self.textures {
+            serde_json::Value::String(path) => Some(path),
+            serde_json::Value::Object(object) => object.get("path")?.as_str(),
+            serde_json::Value::Array(items) => items.first().and_then(|item| {
+                item.as_str().or_else(|| item.get("path").and_then(serde_json::Value::as_str))
+            }),
+            _ => None,
+        }
+    }
+}
+
 impl TerrainTextureManifest {
     pub fn from_json(source: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(source)
@@ -29,6 +42,12 @@ impl TerrainTextureManifest {
 
     pub fn texture(&self, name: &str) -> Option<&TextureEntry> {
         self.texture_data.get(name)
+    }
+
+    /// Resolves the common Bedrock terrain_texture declaration shapes to a
+    /// resource path. Complex variant arrays remain available through texture().
+    pub fn texture_path(&self, name: &str) -> Option<&str> {
+        self.texture(name)?.primary_path()
     }
 }
 
@@ -171,6 +190,21 @@ mod tests {
             TextureAtlas::build_grid(vec![image], 1, 1),
             Err(TextureAtlasError::InvalidPixelLength("book:broken".to_owned()))
         );
+    }
+
+    #[test]
+    fn resolves_common_bedrock_texture_path_shapes() {
+        let json = r#"{
+            "texture_data": {
+                "stone": { "textures": "textures/blocks/stone" },
+                "grass": { "textures": { "path": "textures/blocks/grass_top" } },
+                "sand": { "textures": [{ "path": "textures/blocks/sand" }] }
+            }
+        }"#;
+        let manifest = TerrainTextureManifest::from_json(json).unwrap();
+        assert_eq!(manifest.texture_path("stone"), Some("textures/blocks/stone"));
+        assert_eq!(manifest.texture_path("grass"), Some("textures/blocks/grass_top"));
+        assert_eq!(manifest.texture_path("sand"), Some("textures/blocks/sand"));
     }
 
     #[test]
