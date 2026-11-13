@@ -7,7 +7,7 @@ registries, terrain generation, and CPU-side preparation of renderable chunks.
 ## Current architecture
 
 - **book-core:** stable block identifiers and content definitions.
-- **book-world:** chunk columns, vertical sections, and loaded-world lookup.
+- **book-world:** chunk columns, vertical sections, loaded-world lookup, and compact palette-backed block-state storage.
 - **book-meshing:** CPU geometry generation with neighbor-face culling.
 - **booking-engine:** world orchestration, built-in block registry, prototype
   terrain generation, and section-mesh preparation.
@@ -33,13 +33,14 @@ or binaries are reused.
 
 1. Load world and resource-pack assets.
 2. Resolve block definitions and texture atlas regions.
-3. Generate or update chunk sections.
+3. Generate or update palette-backed chunk sections.
 4. Build CPU meshes using all six loaded neighbors.
 5. Cull chunks outside the camera frustum and configured render distance.
-6. Upload changed meshes to GPU buffers.
-7. Render opaque terrain, cutout geometry, translucent geometry, sky, and
+6. Upload changed meshes to per-chunk GPU buffers.
+7. Sample the block texture atlas with pixel-preserving filtering.
+8. Render opaque terrain, cutout geometry, translucent geometry, sky, and
    environment passes in a defined order.
-8. Apply mobile-appropriate post-processing and present the frame.
+9. Apply mobile-appropriate post-processing and present the frame.
 
 ## Mod extension points
 
@@ -54,7 +55,7 @@ A requested capability is not automatically granted.
 
 ## Compatibility boundary
 
-The current terrain generator is a prototype. The world format, biome and
+The current terrain generator and built-in texture atlas are prototypes. Camera state and basic Android touch-look/keyboard movement are now connected to the renderer. The world format, biome and
 noise algorithms, block states, lighting model, resource-pack rendering,
 entity pipeline, and Bedrock network protocol are not yet Bedrock-compatible.
 Those systems must be implemented and tested independently before claiming
