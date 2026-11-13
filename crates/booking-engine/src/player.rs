@@ -64,6 +64,11 @@ impl PlayerController {
     pub fn pitch(&self) -> f32 { self.pitch }
     pub fn on_ground(&self) -> bool { self.on_ground }
 
+    pub fn forward(&self) -> [f32; 3] {
+        let horizontal = self.pitch.cos();
+        [self.yaw.cos() * horizontal, self.pitch.sin(), self.yaw.sin() * horizontal]
+    }
+
     pub fn camera_position(&self) -> [f32; 3] {
         [self.position[0], self.position[1] + EYE_HEIGHT, self.position[2]]
     }
@@ -191,5 +196,138 @@ mod tests {
         }
         assert_ne!(player.position()[2], start[2]);
         assert_eq!(player.position()[1], start[1]);
+    }
+}
+
+
+/// Result of a voxel raycast. `adjacent` is the air cell immediately before
+/// the hit and can be used as a candidate block-placement position.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BlockHit {
+    pub position: [i32; 3],
+    pub adjacent: [i32; 3],
+    pub face: [i32; 3],
+    pub distance: f32,
+}
+
+impl BookingEngine {
+    /// Traverses the voxel grid using a 3D DDA raycast and returns the first
+    /// registered solid block within the requested distance.
+    pub fn raycast_blocks(
+        &self,
+        origin: [f32; 3],
+        direction: [f32; 3],
+        max_distance: f32,
+    ) -> Option<BlockHit> {
+        let length = (direction[0] * direction[0]
+            + direction[1] * direction[1]
+            + direction[2] * direction[2]).sqrt();
+        if length <= f32::EPSILON || max_distance <= 0.0 {
+            return None;
+        }
+        let direction = [direction[0] / length, direction[1] / length, direction[2] / length];
+        let mut cell = [origin[0].floor() as i32, origin[1].floor() as i32, origin[2].floor() as i32];
+        let mut previous = cell;
+        let step = [
+            direction[0].total_cmp(&0.0) as i32,
+            direction[1].total_cmp(&0.0) as i32,
+            direction[2].total_cmp(&0.0) as i32,
+        ];
+        let step = step.map(|value| match value { -1 => -1, 1 => 1, _ => 0 });
+        let delta = direction.map(|value| if value.abs() <= f32::EPSILON { f32::INFINITY } else { 1.0 / value.abs() });
+        let mut max_t = [0.0; 3];
+        for axis in 0..3 {
+            max_t[axis] = if step[axis] > 0 {
+                (cell[axis] as f32 + 1.0 - origin[axis]) / direction[axis]
+            } else if step[axis] < 0 {
+                (origin[axis] - cell[axis] as f32) / -direction[axis]
+            } else {
+                f32::INFINITY
+            };
+        }
+
+        let mut distance = 0.0;
+        let mut face = [0, 0, 0];
+        loop {
+            if let Some(block) = self.world().get_block(cell[0], cell[1], cell[2]) {
+                if self.block_registry().get(block)
+                    .map(|definition| definition.solid)
+                    .unwrap_or(false)
+                {
+                    return Some(BlockHit { position: cell, adjacent: previous, face, distance });
+                }
+            }
+
+            let axis = if max_t[0] <= max_t[1] && max_t[0] <= max_t[2] {
+                0
+            } else if max_t[1] <= max_t[2] {
+                1
+            } else {
+                2
+            };
+            distance = max_t[axis];
+            if !distance.is_finite() || distance > max_distance {
+                return None;
+            }
+            previous = cell;
+            cell[axis] += step[axis];
+            face = [0, 0, 0];
+            face[axis] = -step[axis];
+            max_t[axis] += delta[axis];
+        }
+    }
+
+    /// Removes a block unless it is the unbreakable prototype bedrock layer.
+    pub fn break_block_at(&mut self, position: [i32; 3]) -> bool {
+        if self.world().get_block(position[0], position[1], position[2]) == Some(book_core::BlockId(4)) {
+            return false;
+        }
+        self.world_mut().set_block(
+            position[0], position[1], position[2], book_core::BlockId::AIR,
+        )
+    }
+
+    /// Places a registered solid block into an empty cell of a loaded chunk.
+    pub fn place_block_at(&mut self, position: [i32; 3], block: book_core::BlockId) -> bool {
+        let Some(definition) = self.block_registry().get(block) else { return false; };
+        if !definition.solid { return false; }
+        if let Some(existing) = self.world().get_block(position[0], position[1], position[2]) {
+            if existing != book_core::BlockId::AIR { return false; }
+        }
+        let (chunk, _, _) = ChunkManager::locate(position[0], position[2]);
+        if !self.world().is_loaded(chunk) { return false; }
+        self.world_mut().set_block(position[0], position[1], position[2], block)
+    }
+}
+
+#[cfg(test)]
+mod interaction_tests {
+    use super::*;
+    use book_core::BlockId;
+
+    #[test]
+    fn raycast_finds_surface_block() {
+        let mut engine = BookingEngine::new();
+        engine.generate_prototype_terrain(1);
+        let mut player = PlayerController::spawn(&engine, 0, 0).expect("spawn surface");
+        player.look(0.0, -0.7);
+        let hit = engine.raycast_blocks(player.camera_position(), player.forward(), 6.0);
+        assert!(hit.is_some());
+    }
+
+    #[test]
+    fn bedrock_cannot_be_broken() {
+        let mut engine = BookingEngine::new();
+        engine.generate_prototype_terrain(1);
+        assert!(!engine.break_block_at([0, -32, 0]));
+        assert_eq!(engine.world().get_block(0, -32, 0), Some(BlockId(4)));
+    }
+
+    #[test]
+    fn registered_block_can_be_placed_in_loaded_air() {
+        let mut engine = BookingEngine::new();
+        engine.generate_prototype_terrain(1);
+        assert!(engine.place_block_at([0, 50, 0], BlockId(3)));
+        assert_eq!(engine.world().get_block(0, 50, 0), Some(BlockId(3)));
     }
 }
