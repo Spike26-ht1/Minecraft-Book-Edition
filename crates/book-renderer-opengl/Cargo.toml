@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+booking-engine = { path = "../booking-engine" }
 book-core = { path = "../book-core" }
 book-world = { path = "../book-world" }
 book-meshing = { path = "../book-meshing" }
