@@ -10,45 +10,148 @@ pub struct ChunkPos {
     pub z: i32,
 }
 
-/// A 16 × 16 × 16 section of blocks.
+/// Palette-compressed storage for a fixed number of block states.
+///
+/// Entries use a compact palette index and a variable bit width. This is a
+/// Booking storage foundation; exact Bedrock network/chunk serialization is
+/// implemented separately.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ChunkSection {
-    blocks: [BlockState; SECTION_VOLUME],
+pub struct PalettedBlockStorage {
+    capacity: usize,
+    bits_per_entry: u8,
+    palette: Vec<BlockState>,
+    palette_indices: std::collections::BTreeMap<BlockState, u16>,
+    data: Vec<u64>,
 }
 
-impl Default for ChunkSection {
-    fn default() -> Self {
+impl PalettedBlockStorage {
+    pub fn new(capacity: usize) -> Self {
+        let mut palette_indices = std::collections::BTreeMap::new();
+        palette_indices.insert(BlockState::AIR, 0);
+        let bits_per_entry = 4;
+        let word_count = (capacity * bits_per_entry as usize).div_ceil(64);
         Self {
-            blocks: [BlockState::AIR; SECTION_VOLUME],
+            capacity,
+            bits_per_entry,
+            palette: vec![BlockState::AIR],
+            palette_indices,
+            data: vec![0; word_count],
+        }
+    }
+
+    pub fn len(&self) -> usize { self.capacity }
+    pub fn is_empty(&self) -> bool { self.capacity == 0 }
+    pub fn bits_per_entry(&self) -> u8 { self.bits_per_entry }
+    pub fn palette(&self) -> &[BlockState] { &self.palette }
+
+    pub fn get(&self, index: usize) -> Option<BlockState> {
+        if index >= self.capacity { return None; }
+        let palette_index = self.read_index(index) as usize;
+        self.palette.get(palette_index).copied()
+    }
+
+    pub fn set(&mut self, index: usize, state: BlockState) -> bool {
+        if index >= self.capacity { return false; }
+        let palette_index = if let Some(index) = self.palette_indices.get(&state) {
+            *index
+        } else {
+            let next = self.palette.len() as u16;
+            self.palette.push(state);
+            self.palette_indices.insert(state, next);
+            self.ensure_palette_capacity();
+            next
+        };
+        self.write_index(index, palette_index);
+        true
+    }
+
+    pub fn iter_states(&self) -> impl Iterator<Item = BlockState> + '_ {
+        (0..self.capacity).filter_map(|index| self.get(index))
+    }
+
+    fn ensure_palette_capacity(&mut self) {
+        let required = (usize::BITS - (self.palette.len() - 1).leading_zeros()) as u8;
+        let new_bits = required.max(4);
+        if new_bits <= self.bits_per_entry { return; }
+
+        let old_bits = self.bits_per_entry;
+        let old_indices: Vec<u16> = (0..self.capacity)
+            .map(|index| self.read_index_with_bits(index, old_bits))
+            .collect();
+        self.bits_per_entry = new_bits;
+        self.data = vec![0; (self.capacity * new_bits as usize).div_ceil(64)];
+        for (index, palette_index) in old_indices.into_iter().enumerate() {
+            self.write_index(index, palette_index);
+        }
+    }
+
+    fn read_index(&self, index: usize) -> u16 {
+        self.read_index_with_bits(index, self.bits_per_entry)
+    }
+
+    fn read_index_with_bits(&self, index: usize, bits: u8) -> u16 {
+        let bit_index = index * bits as usize;
+        let word_index = bit_index / 64;
+        let shift = (bit_index % 64) as u32;
+        let mask = (1_u64 << bits) - 1;
+        let mut value = self.data[word_index] >> shift;
+        if shift + bits as u32 > 64 {
+            value |= self.data[word_index + 1] << (64 - shift);
+        }
+        (value & mask) as u16
+    }
+
+    fn write_index(&mut self, index: usize, value: u16) {
+        let bits = self.bits_per_entry;
+        let bit_index = index * bits as usize;
+        let word_index = bit_index / 64;
+        let shift = (bit_index % 64) as u32;
+        let mask = (1_u64 << bits) - 1;
+        let value = value as u64 & mask;
+
+        self.data[word_index] =
+            (self.data[word_index] & !(mask << shift)) | (value << shift);
+
+        if shift + bits as u32 > 64 {
+            let spill_bits = shift + bits as u32 - 64;
+            let spill_mask = (1_u64 << spill_bits) - 1;
+            self.data[word_index + 1] =
+                (self.data[word_index + 1] & !spill_mask)
+                | ((value >> (bits as u32 - spill_bits)) & spill_mask);
         }
     }
 }
 
-impl ChunkSection {
-    pub fn new() -> Self {
-        Self::default()
+/// A 16 × 16 × 16 section of block states.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChunkSection {
+    storage: PalettedBlockStorage,
+}
+
+impl Default for ChunkSection {
+    fn default() -> Self {
+        Self { storage: PalettedBlockStorage::new(SECTION_VOLUME) }
     }
+}
+
+impl ChunkSection {
+    pub fn new() -> Self { Self::default() }
 
     /// Returns the linear array index for local section coordinates.
     pub fn index(x: usize, y: usize, z: usize) -> Option<usize> {
         if x >= SECTION_EDGE || y >= SECTION_EDGE || z >= SECTION_EDGE {
             return None;
         }
-
         Some(x + SECTION_EDGE * (z + SECTION_EDGE * y))
     }
 
     pub fn get_state(&self, x: usize, y: usize, z: usize) -> Option<BlockState> {
-        let index = Self::index(x, y, z)?;
-        Some(self.blocks[index])
+        self.storage.get(Self::index(x, y, z)?)
     }
 
     pub fn set_state(&mut self, x: usize, y: usize, z: usize, state: BlockState) -> bool {
-        let Some(index) = Self::index(x, y, z) else {
-            return false;
-        };
-        self.blocks[index] = state;
-        true
+        let Some(index) = Self::index(x, y, z) else { return false; };
+        self.storage.set(index, state)
     }
 
     pub fn get(&self, x: usize, y: usize, z: usize) -> Option<BlockId> {
@@ -59,11 +162,13 @@ impl ChunkSection {
         self.set_state(x, y, z, BlockState::new(block, 0))
     }
 
-    pub fn blocks(&self) -> &[BlockState; SECTION_VOLUME] {
-        &self.blocks
+    pub fn blocks(&self) -> impl Iterator<Item = BlockState> + '_ {
+        self.storage.iter_states()
     }
-}
 
+    pub fn palette(&self) -> &[BlockState] { self.storage.palette() }
+    pub fn bits_per_entry(&self) -> u8 { self.storage.bits_per_entry() }
+}
 
 /// A vertical column of 16 × 16 sections at one horizontal chunk position.
 /// Section coordinates use Euclidean division, so negative world heights map
@@ -173,10 +278,34 @@ mod tests {
     }
 
     #[test]
+    fn palette_storage_round_trips_values_across_word_boundaries() {
+        let mut storage = PalettedBlockStorage::new(64);
+        for index in 0..64 {
+            let state = BlockState::new(BlockId((index % 19 + 1) as u16), (index % 7) as u16);
+            assert!(storage.set(index, state));
+        }
+        for index in 0..64 {
+            let expected = BlockState::new(
+                BlockId((index % 19 + 1) as u16),
+                (index % 7) as u16,
+            );
+            assert_eq!(storage.get(index), Some(expected));
+        }
+        assert!(storage.bits_per_entry() >= 5);
+    }
+
+    #[test]
+    fn palette_storage_rejects_out_of_bounds_indices() {
+        let mut storage = PalettedBlockStorage::new(4);
+        assert!(!storage.set(4, BlockState::new(BlockId(1), 0)));
+        assert_eq!(storage.get(4), None);
+    }
+
+    #[test]
     fn new_section_is_filled_with_air() {
         let section = ChunkSection::new();
 
-        assert!(section.blocks().iter().all(|state| *state == BlockState::AIR));
+        assert!(section.blocks().all(|state| state == BlockState::AIR));
     }
 
     #[test]
