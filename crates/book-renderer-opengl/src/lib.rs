@@ -83,7 +83,9 @@ const VERTEX_SHADER: &str = r#"#version 300 es
 precision highp float;
 in vec3 position;
 in vec2 uv;
+in vec3 color;
 out vec2 v_uv;
+out vec3 v_color;
 uniform float u_time;
 void main() {
     vec3 centered = position - vec3(8.0, 0.0, 8.0);
@@ -95,6 +97,7 @@ void main() {
     gl_Position = vec4(rotated_x * 0.075, centered.y * 0.13 - rotated_z * 0.045,
                        0.5 + rotated_z * 0.001 - centered.y * 0.001, 1.0);
     v_uv = uv;
+    v_color = color;
 }
 "#;
 
@@ -102,10 +105,11 @@ void main() {
 const FRAGMENT_SHADER: &str = r#"#version 300 es
 precision highp float;
 in vec2 v_uv;
+in vec3 v_color;
 out vec4 out_color;
 void main() {
-    float texture_hint = 0.94 + fract(v_uv.x * 16.0) * 0.06;
-    out_color = vec4(vec3(0.30, 0.58, 0.25) * texture_hint, 1.0);
+    float texture_hint = 0.97 + fract(v_uv.x * 16.0) * 0.03;
+    out_color = vec4(v_color * texture_hint, 1.0);
 }
 "#;
 
@@ -133,8 +137,8 @@ void main() { out_color = v_color; }
 "#;
 
 #[derive(Clone, Copy)]
-struct Vertex { position: [f32; 3], uv: [f32; 2] }
-implement_vertex!(Vertex, position, uv);
+struct Vertex { position: [f32; 3], uv: [f32; 2], color: [f32; 3] }
+implement_vertex!(Vertex, position, uv, color);
 
 #[derive(Clone, Copy)]
 struct DebugVertex { position: [f32; 2], color: [f32; 4] }
@@ -144,7 +148,9 @@ implement_vertex!(DebugVertex, position, color);
 const VERTEX_SHADER: &str = r#"#version 140
 in vec3 position;
 in vec2 uv;
+in vec3 color;
 out vec2 v_uv;
+out vec3 v_color;
 uniform float u_time;
 void main() {
     vec3 centered = position - vec3(8.0, 0.0, 8.0);
@@ -156,16 +162,18 @@ void main() {
     gl_Position = vec4(rotated_x * 0.075, centered.y * 0.13 - rotated_z * 0.045,
                        0.5 + rotated_z * 0.001 - centered.y * 0.001, 1.0);
     v_uv = uv;
+    v_color = color;
 }
 "#;
 
 #[cfg(not(target_os = "android"))]
 const FRAGMENT_SHADER: &str = r#"#version 140
 in vec2 v_uv;
+in vec3 v_color;
 out vec4 out_color;
 void main() {
-    float texture_hint = 0.94 + fract(v_uv.x * 16.0) * 0.06;
-    out_color = vec4(vec3(0.30, 0.58, 0.25) * texture_hint, 1.0);
+    float texture_hint = 0.97 + fract(v_uv.x * 16.0) * 0.03;
+    out_color = vec4(v_color * texture_hint, 1.0);
 }
 "#;
 
@@ -515,16 +523,42 @@ fn create_android_display(
 }
 
 fn demo_chunk_vertices() -> Vec<Vertex> {
+    // Procedural showcase fixture using the real block registry, section storage
+    // and CPU mesher. Streamed world data will replace this fixture in a later step.
     let mut registry = BlockRegistry::new();
-    registry.register(BlockDefinition {
-        id: BlockId(1), name: "book:grass_block".to_owned(),
-        atlas_tile: AtlasTile { x: 0, y: 0 }, solid: true, opaque: true,
-    });
+    for (id, name, tile) in [
+        (1, "book:grass_block", AtlasTile { x: 0, y: 0 }),
+        (2, "book:dirt", AtlasTile { x: 1, y: 0 }),
+        (3, "book:stone", AtlasTile { x: 2, y: 0 }),
+    ] {
+        registry.register(BlockDefinition {
+            id: BlockId(id), name: name.to_owned(), atlas_tile: tile,
+            solid: true, opaque: true,
+        });
+    }
     let mut section = ChunkSection::new();
     for z in 0..SECTION_EDGE {
-        for x in 0..SECTION_EDGE { section.set(x, 0, z, BlockId(1)); }
+        for x in 0..SECTION_EDGE {
+            let wave = ((x as f32 * 0.48).sin() + (z as f32 * 0.39).cos()) * 1.35;
+            let ridge = (((x as f32 - 7.5).powi(2) + (z as f32 - 7.5).powi(2)).sqrt() * -0.16 + 1.8);
+            let height = (3.0 + wave + ridge).round().clamp(1.0, 7.0) as usize;
+            for y in 0..=height {
+                let block = if y == height { BlockId(1) }
+                    else if y + 2 >= height { BlockId(2) }
+                    else { BlockId(3) };
+                section.set(x, y, z, block);
+            }
+        }
     }
     mesh_section(&section, &registry, 16, 16).vertices.into_iter()
-        .map(|vertex| Vertex { position: vertex.position, uv: vertex.uv })
+        .map(|vertex| {
+            let color = match vertex.block_id {
+                BlockId(1) => [0.30, 0.68, 0.24],
+                BlockId(2) => [0.48, 0.31, 0.18],
+                BlockId(3) => [0.48, 0.50, 0.52],
+                _ => [1.0, 0.0, 1.0],
+            };
+            Vertex { position: vertex.position, uv: vertex.uv, color }
+        })
         .collect()
 }
