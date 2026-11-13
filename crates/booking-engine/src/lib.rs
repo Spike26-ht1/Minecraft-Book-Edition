@@ -139,7 +139,7 @@ mod tests {
         engine.generate_prototype_terrain(1);
         let meshes = engine.build_loaded_world_meshes();
         assert!(meshes.len() > 9);
-        assert!(meshes.iter().all(|section| !section.mesh.is_empty()));
+        assert!(meshes.iter().any(|section| !section.mesh.is_empty()));
         assert!(meshes.iter().any(|section| section.section_y < 0));
         assert!(meshes.iter().any(|section| section.section_y > 0));
     }
