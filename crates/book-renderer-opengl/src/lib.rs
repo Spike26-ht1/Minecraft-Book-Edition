@@ -641,4 +641,3 @@ fn sample_world_vertices() -> Vec<Vertex> {
 
     vertices
 }
-}
