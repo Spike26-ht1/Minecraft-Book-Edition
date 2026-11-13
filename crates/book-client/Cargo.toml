@@ -10,6 +10,7 @@ name = "main"
 crate-type = ["cdylib"]
 
 [dependencies]
+booking-engine = { path = "../booking-engine" }
 book-renderer-api = { path = "../book-renderer-api" }
 book-renderer-opengl = { path = "../book-renderer-opengl" }
 glium = "0.36"
