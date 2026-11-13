@@ -3,6 +3,7 @@
 use book_renderer_api::{ClearColor, RenderFrame, RendererBackend};
 use book_renderer_opengl::OpenGlRenderer;
 use glium::winit::event::{ElementState, Event, TouchPhase, WindowEvent};
+use glium::winit::event_loop::ControlFlow;
 use glium::winit::keyboard::{KeyCode, PhysicalKey};
 use glium::winit::platform::android::activity::AndroidApp;
 use glium::winit::platform::android::EventLoopBuilderExtAndroid;
@@ -26,8 +27,14 @@ fn initialize_android_logging() {
         log::error!("{message}");
         book_renderer_opengl::record_android_diagnostic(&message);
     }));
-    log::info!("Minecraft Book Edition Pre-Alpha 1.2.0: android_main entered; process_id={}", std::process::id());
-    book_renderer_opengl::record_android_diagnostic(&format!("android_main entered; process_id={}", std::process::id()));
+    log::info!(
+        "Minecraft Book Edition Pre-Alpha 1.2.0: android_main entered; process_id={}",
+        std::process::id()
+    );
+    book_renderer_opengl::record_android_diagnostic(&format!(
+        "android_main entered; process_id={}",
+        std::process::id()
+    ));
 }
 
 fn derive_media_root(external_files_path: &Path) -> Option<PathBuf> {
@@ -182,10 +189,10 @@ pub fn android_main(app: AndroidApp) {
                 window.request_redraw();
                 let deadline = Instant::now() + FRAME_INTERVAL;
                 next_frame_deadline = Some(deadline);
-                active_loop.set_control_flow(glium::winit::event_loop::ControlFlow::WaitUntil(deadline));
+                active_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
             } else {
                 next_frame_deadline = None;
-                active_loop.set_control_flow(glium::winit::event_loop::ControlFlow::Wait);
+                active_loop.set_control_flow(ControlFlow::Wait);
             }
         }
         Event::Suspended => {
@@ -195,8 +202,11 @@ pub fn android_main(app: AndroidApp) {
             );
             renderer_state = None;
             next_frame_deadline = None;
-            active_loop.set_control_flow(glium::winit::event_loop::ControlFlow::Wait);
-            book_renderer_opengl::record_android_diagnostic(&format!("Android lifecycle: renderer released; process_id={}", std::process::id()));
+            active_loop.set_control_flow(ControlFlow::Wait);
+            book_renderer_opengl::record_android_diagnostic(&format!(
+                "Android lifecycle: renderer released; process_id={}",
+                std::process::id()
+            ));
         }
         Event::WindowEvent { window_id, event } => {
             let window_matches = renderer_state
@@ -208,7 +218,9 @@ pub fn android_main(app: AndroidApp) {
             match event {
                 WindowEvent::Focused(focused) => {
                     log::info!("Android window focus changed: focused={focused}");
-                    book_renderer_opengl::record_android_diagnostic(&format!("Android window focus changed: focused={focused}"));
+                    book_renderer_opengl::record_android_diagnostic(&format!(
+                        "Android window focus changed: focused={focused}"
+                    ));
                 }
                 WindowEvent::CloseRequested => {
                     log::info!("Android window requested close; releasing renderer");
@@ -262,13 +274,13 @@ pub fn android_main(app: AndroidApp) {
                     }
                     let next_deadline = Instant::now() + FRAME_INTERVAL;
                     next_frame_deadline = Some(next_deadline);
-                    active_loop.set_control_flow(glium::winit::event_loop::ControlFlow::WaitUntil(next_deadline));
+                    active_loop.set_control_flow(ControlFlow::WaitUntil(next_deadline));
                 } else {
-                    active_loop.set_control_flow(glium::winit::event_loop::ControlFlow::WaitUntil(deadline));
+                    active_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
                 }
             } else {
                 next_frame_deadline = None;
-                active_loop.set_control_flow(glium::winit::event_loop::ControlFlow::Wait);
+                active_loop.set_control_flow(ControlFlow::Wait);
             }
         }
         Event::LoopExiting => {
