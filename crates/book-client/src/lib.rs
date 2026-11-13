@@ -10,6 +10,7 @@ use glium::winit::platform::android::EventLoopBuilderExtAndroid;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const PACKAGE_ID: &str = "com.spike26.minecraftbookedition";
@@ -150,8 +151,10 @@ pub fn android_main(app: AndroidApp) {
         }
     };
 
-    let frame = RenderFrame { clear_color: ClearColor::SKY };
+    let mut frame = RenderFrame::default();
     let mut renderer_state = None;
+    let mut pressed_keys = HashSet::new();
+    let mut active_touches: HashMap<u64, (f64, f64)> = HashMap::new();
     let mut next_frame_deadline: Option<Instant> = None;
     let result = event_loop.run(move |event, active_loop| match event {
         Event::Resumed => {
@@ -229,23 +232,50 @@ pub fn android_main(app: AndroidApp) {
                     );
                     renderer_state = None;
                 }
-                WindowEvent::KeyboardInput { event, .. }
-                    if event.state == ElementState::Pressed
-                        && event.physical_key == PhysicalKey::Code(KeyCode::F3) =>
-                {
-                    if let Some((window, renderer)) = renderer_state.as_mut() {
-                        renderer.toggle_debug();
-                        window.request_redraw();
+                WindowEvent::KeyboardInput { event, .. } => {
+                    if let PhysicalKey::Code(key) = event.physical_key {
+                        if event.state == ElementState::Pressed {
+                            pressed_keys.insert(key);
+                            if key == KeyCode::F3 {
+                                if let Some((window, renderer)) = renderer_state.as_mut() {
+                                    renderer.toggle_debug();
+                                    window.request_redraw();
+                                }
+                            }
+                        } else {
+                            pressed_keys.remove(&key);
+                        }
                     }
                 }
-                WindowEvent::Touch(touch) if touch.phase == TouchPhase::Started => {
-                    if let Some((window, renderer)) = renderer_state.as_mut() {
-                        let size = window.inner_size();
-                        if touch.location.x >= size.width.saturating_sub(96) as f64
-                            && touch.location.y <= 64.0
-                        {
-                            renderer.toggle_debug();
-                            window.request_redraw();
+                WindowEvent::Touch(touch) => {
+                    let touch_id = touch.id;
+                    let location = (touch.location.x, touch.location.y);
+                    match touch.phase {
+                        TouchPhase::Started => {
+                            active_touches.insert(touch_id, location);
+                            if let Some((window, renderer)) = renderer_state.as_mut() {
+                                let size = window.inner_size();
+                                if location.0 >= size.width.saturating_sub(96) as f64
+                                    && location.1 <= 64.0
+                                {
+                                    renderer.toggle_debug();
+                                    window.request_redraw();
+                                }
+                            }
+                        }
+                        TouchPhase::Moved => {
+                            if let Some(previous) = active_touches.insert(touch_id, location) {
+                                frame.camera.look(
+                                    ((location.0 - previous.0) as f32) * 0.004,
+                                    -((location.1 - previous.1) as f32) * 0.004,
+                                );
+                                if let Some((window, _)) = renderer_state.as_ref() {
+                                    window.request_redraw();
+                                }
+                            }
+                        }
+                        TouchPhase::Ended | TouchPhase::Cancelled => {
+                            active_touches.remove(&touch_id);
                         }
                     }
                 }
@@ -266,6 +296,19 @@ pub fn android_main(app: AndroidApp) {
         }
         Event::AboutToWait => {
             if renderer_state.is_some() {
+                const MOVE_STEP: f32 = 0.22;
+                const LOOK_STEP: f32 = 0.025;
+                if pressed_keys.contains(&KeyCode::KeyW) { frame.camera.move_forward(MOVE_STEP); }
+                if pressed_keys.contains(&KeyCode::KeyS) { frame.camera.move_forward(-MOVE_STEP); }
+                if pressed_keys.contains(&KeyCode::KeyA) { frame.camera.move_right(-MOVE_STEP); }
+                if pressed_keys.contains(&KeyCode::KeyD) { frame.camera.move_right(MOVE_STEP); }
+                if pressed_keys.contains(&KeyCode::Space) { frame.camera.move_vertical(MOVE_STEP); }
+                if pressed_keys.contains(&KeyCode::ShiftLeft) { frame.camera.move_vertical(-MOVE_STEP); }
+                if pressed_keys.contains(&KeyCode::ArrowLeft) { frame.camera.look(-LOOK_STEP, 0.0); }
+                if pressed_keys.contains(&KeyCode::ArrowRight) { frame.camera.look(LOOK_STEP, 0.0); }
+                if pressed_keys.contains(&KeyCode::ArrowUp) { frame.camera.look(0.0, LOOK_STEP); }
+                if pressed_keys.contains(&KeyCode::ArrowDown) { frame.camera.look(0.0, -LOOK_STEP); }
+
                 let now = Instant::now();
                 let deadline = next_frame_deadline.unwrap_or(now);
                 if now >= deadline {
