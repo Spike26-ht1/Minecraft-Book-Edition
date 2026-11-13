@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/book-core", "crates/book-world", "crates/book-assets", "crates/book-meshing", "crates/book-renderer-api", "crates/book-renderer-opengl", "crates/book-client"]
+members = ["crates/book-core", "crates/book-world", "crates/book-assets", "crates/book-meshing", "crates/book-renderer-api", "crates/book-renderer-opengl", "crates/book-client", "crates/book-mod-api"]
 default-members = ["crates/book-client"]
 
 [workspace.package]
