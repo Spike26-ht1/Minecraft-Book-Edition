@@ -1,6 +1,7 @@
 #![cfg(target_os = "android")]
 
 use booking_engine::{BookingEngine, PlayerController, PlayerInput};
+use book_core::BlockId;
 use book_renderer_api::{RenderFrame, RendererBackend};
 use book_renderer_opengl::OpenGlRenderer;
 use glium::winit::event::{ElementState, Event, MouseButton, TouchPhase, WindowEvent};
@@ -163,6 +164,7 @@ pub fn android_main(app: AndroidApp) {
     let mut pressed_keys = HashSet::new();
     let mut active_touches: HashMap<u64, (f64, f64)> = HashMap::new();
     let mut touch_start_positions: HashMap<u64, (f64, f64)> = HashMap::new();
+    let mut touch_start_times: HashMap<u64, Instant> = HashMap::new();
     let mut next_frame_deadline: Option<Instant> = None;
     let mut last_simulation_tick = Instant::now();
     let result = event_loop.run(move |event, active_loop| match event {
@@ -278,6 +280,7 @@ pub fn android_main(app: AndroidApp) {
                         TouchPhase::Started => {
                             active_touches.insert(touch_id, location);
                             touch_start_positions.insert(touch_id, location);
+                            touch_start_times.insert(touch_id, Instant::now());
                             if let Some((window, renderer)) = renderer_state.as_mut() {
                                 let size = window.inner_size();
                                 if location.0 >= size.width.saturating_sub(96) as f64
@@ -305,6 +308,9 @@ pub fn android_main(app: AndroidApp) {
                         TouchPhase::Ended => {
                             active_touches.remove(&touch_id);
                             if let Some(start) = touch_start_positions.remove(&touch_id) {
+                                let held_for = touch_start_times.remove(&touch_id)
+                                    .map(|started| started.elapsed())
+                                    .unwrap_or_default();
                                 let dx = location.0 - start.0;
                                 let dy = location.1 - start.1;
                                 let is_tap = dx * dx + dy * dy < 144.0;
@@ -319,10 +325,19 @@ pub fn android_main(app: AndroidApp) {
                                     if let Some(hit) = engine.raycast_blocks(
                                         player.camera_position(), player.forward(), 6.0,
                                     ) {
-                                        if engine.break_block_at(hit.position) {
+                                        let changed = if held_for >= Duration::from_millis(350) {
+                                            if player.intersects_block(hit.adjacent) {
+                                                false
+                                            } else {
+                                                engine.place_block_at(hit.adjacent, BlockId(3))
+                                            }
+                                        } else {
+                                            engine.break_block_at(hit.position)
+                                        };
+                                        if changed {
                                             if let Some((window, renderer)) = renderer_state.as_mut() {
                                                 if let Err(error) = renderer.sync_world(&engine) {
-                                                    log::error!("World mesh sync after block break failed: {error}");
+                                                    log::error!("World mesh sync after touch block interaction failed: {error}");
                                                 }
                                                 window.request_redraw();
                                             }
@@ -334,6 +349,7 @@ pub fn android_main(app: AndroidApp) {
                         TouchPhase::Cancelled => {
                             active_touches.remove(&touch_id);
                             touch_start_positions.remove(&touch_id);
+                            touch_start_times.remove(&touch_id);
                         }
                     }
                 }
