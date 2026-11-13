@@ -21,7 +21,7 @@ impl Default for RenderFrame {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GraphicsApi { OpenGl, Vulkan }
+pub enum GraphicsApi { OpenGl, OpenGlEs, Vulkan }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RendererInfo {
