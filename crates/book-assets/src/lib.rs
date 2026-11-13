@@ -61,6 +61,27 @@ pub struct TextureImage {
     pub rgba: Vec<u8>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TextureDecodeError {
+    pub message: String,
+}
+
+impl TextureImage {
+    /// Decodes a PNG resource-pack image into normalized RGBA8 pixels.
+    pub fn from_png(key: impl Into<String>, bytes: &[u8]) -> Result<Self, TextureDecodeError> {
+        let image = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)
+            .map_err(|error| TextureDecodeError { message: error.to_string() })?
+            .to_rgba8();
+        let (width, height) = image.dimensions();
+        Ok(Self {
+            key: key.into(),
+            width,
+            height,
+            rgba: image.into_raw(),
+        })
+    }
+}
+
 /// CPU-side atlas data. The graphics backend is responsible for uploading it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TextureAtlas {
@@ -163,6 +184,12 @@ impl TextureAtlas {
 mod tests {
     use super::*;
 
+
+    #[test]
+    fn png_decoder_rejects_invalid_resource_data() {
+        let error = TextureImage::from_png("example:invalid", b"not a png").unwrap_err();
+        assert!(!error.message.is_empty());
+    }
 
     #[test]
     fn atlas_builder_packs_images_into_fixed_grid() {
