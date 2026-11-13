@@ -495,12 +495,12 @@ fn voxel_camera_matrix(aspect: f32, camera: CameraState) -> [[f32; 4]; 4] {
 
 #[cfg(test)]
 mod camera_tests {
-    use super::voxel_camera_matrix;
+    use super::{voxel_camera_matrix, CameraState};
 
     #[test]
     fn camera_matrix_is_finite_for_mobile_aspect_ratios() {
         for aspect in [0.5, 1.0, 1.777, 2.5] {
-            let matrix = voxel_camera_matrix(aspect);
+            let matrix = voxel_camera_matrix(aspect, CameraState::default());
             assert!(matrix.iter().flatten().all(|value| value.is_finite()));
         }
     }
