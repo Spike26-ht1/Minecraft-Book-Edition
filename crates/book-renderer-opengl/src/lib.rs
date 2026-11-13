@@ -1,7 +1,7 @@
 use book_core::{AtlasTile, BlockDefinition, BlockId, BlockRegistry};
-use book_meshing::mesh_section;
+use book_meshing::mesh_chunk_section;
 use book_renderer_api::{GraphicsApi, RendererBackend, RendererError, RendererInfo, RenderFrame};
-use book_world::{ChunkSection, SECTION_EDGE};
+use book_world::{ChunkColumn, ChunkManager, ChunkPos, SECTION_EDGE};
 #[cfg(not(target_os = "android"))]
 use glium::backend::glutin::SimpleWindowBuilder;
 #[cfg(target_os = "android")]
@@ -230,8 +230,8 @@ impl OpenGlRenderer {
         display: glium::backend::glutin::Display<WindowSurface>,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         #[cfg(target_os = "android")]
-        record_android_diagnostic("Renderer: creating demo chunk vertex buffer");
-        let chunk_vertices = VertexBuffer::new(&display, &demo_chunk_vertices())
+        record_android_diagnostic("Renderer: building chunk-manager world mesh");
+        let chunk_vertices = VertexBuffer::new(&display, &sample_world_vertices())
             .map_err(|error| RendererError::new(format!("Chunk vertex buffer: {error}")))?;
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: compiling chunk shader program");
@@ -277,8 +277,8 @@ impl OpenGlRenderer {
             format!("FRAME: {:.2} MS", self.last_frame_ms),
             "RENDERER: OPENGL".to_owned(),
             "API: OPENGL".to_owned(),
-            "CHUNKS: 1 (TEST)".to_owned(),
-            "BLOCKS: 256 (TEST)".to_owned(),
+            "CHUNKS: 9 (WORLD TEST)".to_owned(),
+            "BLOCKS: PROCEDURAL WORLD".to_owned(),
             format!("VERTICES: {vertex_count}"),
             "F3: HIDE DEBUG".to_owned(),
         ];
@@ -391,8 +391,8 @@ fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 /// Perspective camera aimed at the center of the procedural voxel showcase.
 /// Matrices are column-major to match GLSL uniforms.
 fn voxel_camera_matrix(aspect: f32) -> [[f32; 4]; 4] {
-    let eye = [23.0, 19.0, 27.0];
-    let target = [8.0, 2.0, 8.0];
+    let eye = [39.0, 19.0, 43.0];
+    let target = [24.0, 2.0, 24.0];
     let forward = normalize3([target[0] - eye[0], target[1] - eye[1], target[2] - eye[2]]);
     let side = normalize3(cross3(forward, [0.0, 1.0, 0.0]));
     let up = cross3(side, forward);
@@ -566,9 +566,9 @@ fn create_android_display(
     Ok((window, display))
 }
 
-fn demo_chunk_vertices() -> Vec<Vertex> {
-    // Procedural showcase fixture using the real block registry, section storage
-    // and CPU mesher. Streamed world data will replace this fixture in a later step.
+fn sample_world_vertices() -> Vec<Vertex> {
+    // A small generated world is loaded into the same ChunkManager used by
+    // gameplay. The renderer meshes each section with its six loaded neighbors.
     let mut registry = BlockRegistry::new();
     for (id, name, tile) in [
         (1, "book:grass_block", AtlasTile { x: 0, y: 0 }),
@@ -580,29 +580,65 @@ fn demo_chunk_vertices() -> Vec<Vertex> {
             solid: true, opaque: true,
         });
     }
-    let mut section = ChunkSection::new();
-    for z in 0..SECTION_EDGE {
-        for x in 0..SECTION_EDGE {
-            let wave = ((x as f32 * 0.48).sin() + (z as f32 * 0.39).cos()) * 1.35;
-            let ridge = (((x as f32 - 7.5).powi(2) + (z as f32 - 7.5).powi(2)).sqrt() * -0.16 + 1.8);
-            let height = (3.0 + wave + ridge).round().clamp(1.0, 7.0) as usize;
-            for y in 0..=height {
-                let block = if y == height { BlockId(1) }
-                    else if y + 2 >= height { BlockId(2) }
-                    else { BlockId(3) };
-                section.set(x, y, z, block);
+
+    let mut world = ChunkManager::new();
+    for chunk_z in 0..3 {
+        for chunk_x in 0..3 {
+            let position = ChunkPos { x: chunk_x, z: chunk_z };
+            let mut column = ChunkColumn::new(position);
+            let section = column.section_mut(0);
+
+            for local_z in 0..SECTION_EDGE {
+                for local_x in 0..SECTION_EDGE {
+                    let world_x = chunk_x * SECTION_EDGE as i32 + local_x as i32;
+                    let world_z = chunk_z * SECTION_EDGE as i32 + local_z as i32;
+                    let wave = ((world_x as f32 * 0.12).sin()
+                        + (world_z as f32 * 0.11).cos()) * 1.35;
+                    let distance = ((world_x as f32 - 24.0).powi(2)
+                        + (world_z as f32 - 24.0).powi(2)).sqrt();
+                    let ridge = distance * -0.045 + 1.8;
+                    let height = (3.0 + wave + ridge).round().clamp(1.0, 8.0) as usize;
+
+                    for y in 0..=height {
+                        let block = if y == height { BlockId(1) }
+                            else if y + 2 >= height { BlockId(2) }
+                            else { BlockId(3) };
+                        section.set(local_x, y, local_z, block);
+                    }
+                }
             }
+            world.insert_column(column);
         }
     }
-    mesh_section(&section, &registry, 16, 16).vertices.into_iter()
-        .map(|vertex| {
+
+    let mut vertices = Vec::new();
+    let positions: Vec<ChunkPos> = world.iter().map(|(position, _)| *position).collect();
+    for position in positions {
+        let Some(mesh) = mesh_chunk_section(&world, position, 0, &registry, 16, 16) else {
+            continue;
+        };
+        let offset_x = position.x as f32 * SECTION_EDGE as f32;
+        let offset_z = position.z as f32 * SECTION_EDGE as f32;
+
+        vertices.extend(mesh.vertices.into_iter().map(|vertex| {
             let color = match vertex.block_id {
                 BlockId(1) => [0.30, 0.68, 0.24],
                 BlockId(2) => [0.48, 0.31, 0.18],
                 BlockId(3) => [0.48, 0.50, 0.52],
                 _ => [1.0, 0.0, 1.0],
             };
-            Vertex { position: vertex.position, uv: vertex.uv, color }
-        })
-        .collect()
+            Vertex {
+                position: [
+                    vertex.position[0] + offset_x,
+                    vertex.position[1],
+                    vertex.position[2] + offset_z,
+                ],
+                uv: vertex.uv,
+                color,
+            }
+        }));
+    }
+
+    vertices
+}
 }
