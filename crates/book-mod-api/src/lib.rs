@@ -17,6 +17,8 @@ pub enum ModRuntime {
     RustNative,
     /// Sandboxed WebAssembly module.
     WebAssembly,
+    /// High-level script executed by the Book scripting runtime.
+    Script,
 }
 
 /// Capabilities a mod may request. A request is not a grant.
@@ -50,8 +52,22 @@ pub struct ModManifest {
     pub runtime: ModRuntime,
     /// Package-relative executable module path, resolved by the runtime host.
     pub entrypoint: String,
+    /// Other mods required by this package. Version strings are interpreted by
+    /// the loader's dependency resolver, not by manifest validation.
+    #[serde(default)]
+    pub dependencies: Vec<ModDependency>,
     #[serde(default)]
     pub requested_capabilities: Vec<Capability>,
+}
+
+/// A required or optional dependency on another namespaced mod identifier.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ModDependency {
+    pub id: String,
+    /// Semantic-version requirement, for example `^1.2`.
+    pub version: String,
+    #[serde(default)]
+    pub optional: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -63,6 +79,9 @@ pub enum ManifestError {
     EmptyApiVersion,
     EmptyEntrypoint,
     DuplicateCapability(Capability),
+    InvalidDependencyId(String),
+    EmptyDependencyVersion(String),
+    DuplicateDependency(String),
 }
 
 impl fmt::Display for ManifestError {
@@ -75,6 +94,9 @@ impl fmt::Display for ManifestError {
             Self::EmptyApiVersion => formatter.write_str("API version cannot be empty"),
             Self::EmptyEntrypoint => formatter.write_str("entrypoint cannot be empty"),
             Self::DuplicateCapability(capability) => write!(formatter, "duplicate capability: {capability:?}"),
+            Self::InvalidDependencyId(id) => write!(formatter, "invalid dependency id: {id}"),
+            Self::EmptyDependencyVersion(id) => write!(formatter, "dependency version cannot be empty: {id}"),
+            Self::DuplicateDependency(id) => write!(formatter, "duplicate dependency: {id}"),
         }
     }
 }
@@ -118,6 +140,21 @@ impl ModManifest {
             return Err(ManifestError::EmptyEntrypoint);
         }
 
+        for (index, dependency) in self.dependencies.iter().enumerate() {
+            let mut parts = dependency.id.split(':');
+            let namespace = parts.next().unwrap_or_default();
+            let name = parts.next().unwrap_or_default();
+            if !valid_part(namespace) || !valid_part(name) || parts.next().is_some() {
+                return Err(ManifestError::InvalidDependencyId(dependency.id.clone()));
+            }
+            if dependency.version.trim().is_empty() {
+                return Err(ManifestError::EmptyDependencyVersion(dependency.id.clone()));
+            }
+            if self.dependencies[..index].iter().any(|item| item.id == dependency.id) {
+                return Err(ManifestError::DuplicateDependency(dependency.id.clone()));
+            }
+        }
+
         for (index, capability) in self.requested_capabilities.iter().enumerate() {
             if self.requested_capabilities[..index].contains(capability) {
                 return Err(ManifestError::DuplicateCapability(*capability));
@@ -140,6 +177,7 @@ mod tests {
             api_version: "0.1".to_owned(),
             runtime: ModRuntime::WebAssembly,
             entrypoint: "modules/minimap.wasm".to_owned(),
+            dependencies: vec![ModDependency { id: "book:core".to_owned(), version: "^1.0".to_owned(), optional: false }],
             requested_capabilities: vec![Capability::ReadWorld, Capability::RegisterUi],
         }
     }
@@ -174,6 +212,28 @@ mod tests {
             value.validate(),
             Err(ManifestError::UnsupportedSchema(MANIFEST_SCHEMA_VERSION + 1))
         );
+    }
+
+    #[test]
+    fn rejects_duplicate_dependencies() {
+        let mut value = manifest();
+        value.dependencies.push(value.dependencies[0].clone());
+        assert_eq!(value.validate(), Err(ManifestError::DuplicateDependency("book:core".to_owned())));
+    }
+
+    #[test]
+    fn rejects_empty_dependency_version() {
+        let mut value = manifest();
+        value.dependencies[0].version.clear();
+        assert_eq!(value.validate(), Err(ManifestError::EmptyDependencyVersion("book:core".to_owned())));
+    }
+
+    #[test]
+    fn accepts_script_runtime() {
+        let mut value = manifest();
+        value.runtime = ModRuntime::Script;
+        value.entrypoint = "scripts/main.rhai".to_owned();
+        assert!(value.validate().is_ok());
     }
 
     #[test]
