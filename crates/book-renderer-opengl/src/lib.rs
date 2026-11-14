@@ -26,7 +26,7 @@ use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 use glium::uniform;
 use glium::{implement_vertex, Blend, Depth, DepthTest, DrawParameters, Program, Surface, VertexBuffer};
 use glutin::surface::WindowSurface;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
 #[cfg(target_os = "android")]
@@ -299,11 +299,73 @@ impl OpenGlRenderer {
         }))
     }
 
-    /// Rebuilds GPU chunk buffers after Booking world data has changed.
-    /// This currently refreshes all loaded chunks; dirty-chunk updates will
-    /// narrow the upload work in a later renderer stage.
+    /// Uploads only newly loaded chunk columns and their loaded neighbors.
+    /// Existing GPU meshes are retained, avoiding full-world rebuilds whenever
+    /// the player crosses a chunk boundary.
     pub fn sync_world(&mut self, engine: &BookingEngine) -> Result<(), RendererError> {
-        self.chunk_meshes = upload_chunk_meshes(&self.display, engine)?;
+        let loaded: BTreeSet<(i32, i32)> = engine.world()
+            .iter()
+            .map(|(position, _)| (position.x, position.z))
+            .collect();
+        let existing: BTreeSet<(i32, i32)> = self.chunk_meshes
+            .iter()
+            .map(|mesh| (mesh.chunk_x, mesh.chunk_z))
+            .collect();
+        let missing: BTreeSet<(i32, i32)> =
+            loaded.difference(&existing).copied().collect();
+        if missing.is_empty() {
+            return Ok(());
+        }
+
+        let mut affected = missing.clone();
+        for &(chunk_x, chunk_z) in &missing {
+            for neighbor in [
+                (chunk_x - 1, chunk_z),
+                (chunk_x + 1, chunk_z),
+                (chunk_x, chunk_z - 1),
+                (chunk_x, chunk_z + 1),
+            ] {
+                if loaded.contains(&neighbor) {
+                    affected.insert(neighbor);
+                }
+            }
+        }
+        self.rebuild_chunk_buffers(engine, &affected)
+    }
+
+    /// Rebuilds one edited column and only those cardinal neighbors whose
+    /// boundary faces can have changed.
+    pub fn sync_chunk(
+        &mut self,
+        engine: &BookingEngine,
+        chunk_x: i32,
+        chunk_z: i32,
+    ) -> Result<(), RendererError> {
+        let mut affected = BTreeSet::from([(chunk_x, chunk_z)]);
+        for neighbor in [
+            (chunk_x - 1, chunk_z),
+            (chunk_x + 1, chunk_z),
+            (chunk_x, chunk_z - 1),
+            (chunk_x, chunk_z + 1),
+        ] {
+            let position = book_world::ChunkPos { x: neighbor.0, z: neighbor.1 };
+            if engine.world().is_loaded(position) {
+                affected.insert(neighbor);
+            }
+        }
+        self.rebuild_chunk_buffers(engine, &affected)
+    }
+
+    fn rebuild_chunk_buffers(
+        &mut self,
+        engine: &BookingEngine,
+        positions: &BTreeSet<(i32, i32)>,
+    ) -> Result<(), RendererError> {
+        let replacement = upload_chunk_meshes_for_chunks(&self.display, engine, positions)?;
+        self.chunk_meshes.retain(|mesh| {
+            !positions.contains(&(mesh.chunk_x, mesh.chunk_z))
+        });
+        self.chunk_meshes.extend(replacement);
         self.visible_chunk_count = 0;
         Ok(())
     }
@@ -804,11 +866,65 @@ fn upload_chunk_meshes(
     Ok(meshes)
 }
 
+fn upload_chunk_meshes_for_chunks(
+    display: &glium::backend::glutin::Display<WindowSurface>,
+    engine: &BookingEngine,
+    positions: &BTreeSet<(i32, i32)>,
+) -> Result<Vec<ChunkGpuMesh>, RendererError> {
+    let mut meshes = Vec::new();
+    for (chunk_x, chunk_z, vertices) in sample_world_meshes_for_chunks(engine, positions) {
+        if vertices.is_empty() { continue; }
+        let buffer = VertexBuffer::new(display, &vertices)
+            .map_err(|error| RendererError::new(format!(
+                "Chunk ({chunk_x}, {chunk_z}) vertex buffer: {error}"
+            )))?;
+        meshes.push(ChunkGpuMesh { chunk_x, chunk_z, vertices: buffer });
+    }
+    Ok(meshes)
+}
+
 fn sample_world_meshes(engine: &BookingEngine) -> Vec<(i32, i32, Vec<Vertex>)> {
     // Merge every vertical section into one GPU buffer per chunk column.
     // This reduces draw calls substantially on mobile GPUs.
     let mut chunk_vertices: BTreeMap<(i32, i32), Vec<Vertex>> = BTreeMap::new();
     for section in engine.build_loaded_world_meshes() {
+        let offset_x = section.position.x as f32 * 16.0;
+        let offset_z = section.position.z as f32 * 16.0;
+        let offset_y = section.section_y as f32 * 16.0;
+        let vertices = chunk_vertices
+            .entry((section.position.x, section.position.z))
+            .or_default();
+        for vertex in section.mesh.vertices {
+            let color = match vertex.block_id {
+                BlockId(1) => [0.30, 0.68, 0.24],
+                BlockId(2) => [0.48, 0.31, 0.18],
+                BlockId(3) => [0.48, 0.50, 0.52],
+                BlockId(4) => [0.24, 0.25, 0.27],
+                _ => [1.0, 0.0, 1.0],
+            };
+            vertices.push(Vertex {
+                position: [
+                    vertex.position[0] + offset_x,
+                    vertex.position[1] + offset_y,
+                    vertex.position[2] + offset_z,
+                ],
+                uv: vertex.uv,
+                normal: vertex.normal,
+                color,
+            });
+        }
+    }
+    chunk_vertices.into_iter()
+        .map(|((chunk_x, chunk_z), vertices)| (chunk_x, chunk_z, vertices))
+        .collect()
+}
+
+fn sample_world_meshes_for_chunks(
+    engine: &BookingEngine,
+    positions: &BTreeSet<(i32, i32)>,
+) -> Vec<(i32, i32, Vec<Vertex>)> {
+    let mut chunk_vertices: BTreeMap<(i32, i32), Vec<Vertex>> = BTreeMap::new();
+    for section in engine.build_world_meshes_for_chunks(positions) {
         let offset_x = section.position.x as f32 * 16.0;
         let offset_z = section.position.z as f32 * 16.0;
         let offset_y = section.section_y as f32 * 16.0;
