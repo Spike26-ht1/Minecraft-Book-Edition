@@ -29,9 +29,9 @@ enum ActiveTouch {
     Look,
 }
 
-fn joystick_axis(point: [f64; 2], layout: MobileControlsLayout) -> [f32; 2] {
-    let dx = point[0] as f32 - layout.joystick_center[0];
-    let dy = point[1] as f32 - layout.joystick_center[1];
+fn joystick_axis(point: (f64, f64), layout: MobileControlsLayout) -> [f32; 2] {
+    let dx = point.0 as f32 - layout.joystick_center[0];
+    let dy = point.1 as f32 - layout.joystick_center[1];
     let radius = layout.joystick_radius.max(1.0);
     let mut strafe = (dx / radius).clamp(-1.0, 1.0);
     let mut forward = (-dy / radius).clamp(-1.0, 1.0);
