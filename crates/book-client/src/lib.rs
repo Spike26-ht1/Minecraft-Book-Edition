@@ -26,6 +26,14 @@ fn save_world_if_available(engine: &BookingEngine, path: Option<&Path>) {
     }
 }
 
+fn save_player_if_available(player: &PlayerController, path: Option<&Path>) {
+    let Some(path) = path else { return; };
+    match player.save_to_path(path) {
+        Ok(()) => log::info!("Booking player state saved to {}", path.display()),
+        Err(error) => log::error!("Could not save player state to {}: {error}", path.display()),
+    }
+}
+
 fn initialize_android_logging() {
     android_logger::init_once(
         android_logger::Config::default()
@@ -164,6 +172,9 @@ pub fn android_main(app: AndroidApp) {
     let world_save_path = storage_root
         .as_ref()
         .map(|root| root.join("game/minecraftWorlds/Default/world.book"));
+    let player_save_path = world_save_path
+        .as_ref()
+        .map(|path| path.with_file_name("player.book"));
     let mut world_save_enabled = world_save_path.is_some();
     let mut engine = BookingEngine::new();
     let mut world_loaded = false;
@@ -203,7 +214,26 @@ pub fn android_main(app: AndroidApp) {
         }
     }
 
-    let mut player = PlayerController::spawn(&engine, 0, 0).unwrap_or_default();
+    let mut player = match player_save_path.as_ref() {
+        Some(path) if path.exists() => match PlayerController::load_from_path(&engine, path) {
+            Ok(player) => {
+                log::info!("Restored player position from {}", path.display());
+                player
+            }
+            Err(error) => {
+                log::warn!("Could not restore player save: {error}");
+                let backup_path = path.with_extension("book.corrupt");
+                if let Err(backup_error) = fs::rename(path, &backup_path) {
+                    log::error!(
+                        "Could not preserve invalid player save {}; using spawn: {backup_error}",
+                        path.display()
+                    );
+                }
+                PlayerController::spawn(&engine, 0, 0).unwrap_or_default()
+            }
+        },
+        _ => PlayerController::spawn(&engine, 0, 0).unwrap_or_default(),
+    };
     let mut frame = RenderFrame::default();
     frame.camera.position = player.camera_position();
     frame.camera.yaw = player.yaw();
@@ -266,6 +296,7 @@ pub fn android_main(app: AndroidApp) {
         Event::Suspended => {
             if world_save_enabled {
                 save_world_if_available(&engine, world_save_path.as_deref());
+                save_player_if_available(&player, player_save_path.as_deref());
             }
             log::info!("Android lifecycle: Suspended; releasing renderer");
             book_renderer_opengl::record_android_diagnostic(
@@ -328,6 +359,7 @@ pub fn android_main(app: AndroidApp) {
                             }
                             if world_save_enabled {
                                 save_world_if_available(&engine, world_save_path.as_deref());
+                                save_player_if_available(&player, player_save_path.as_deref());
                             }
                         }
                     }
@@ -402,6 +434,7 @@ pub fn android_main(app: AndroidApp) {
                                             }
                                             if world_save_enabled {
                                                 save_world_if_available(&engine, world_save_path.as_deref());
+                                                save_player_if_available(&player, player_save_path.as_deref());
                                             }
                                         }
                                     }
@@ -502,6 +535,7 @@ pub fn android_main(app: AndroidApp) {
         Event::LoopExiting => {
             if world_save_enabled {
                 save_world_if_available(&engine, world_save_path.as_deref());
+                save_player_if_available(&player, player_save_path.as_deref());
             }
             log::info!("Winit Android event loop is exiting");
             book_renderer_opengl::record_android_diagnostic("Winit: event loop is exiting");
