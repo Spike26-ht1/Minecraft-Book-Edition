@@ -382,7 +382,7 @@ impl OpenGlRenderer {
             &mut vertices,
             layout.joystick_center,
             layout.joystick_radius,
-            false,
+            state.strafe.abs() > 0.02 || state.forward.abs() > 0.02,
             [state.strafe, state.forward],
         );
 
@@ -614,7 +614,7 @@ fn push_mobile_button(
 
     // Small irregular stone pixels give the temporary HUD a Bedrock-like
     // block texture without embedding Mojang's copyrighted UI sprites.
-    let tile = 5.0_f32;
+    let tile = 9.0_f32;
     let shades = [
         [0.32, 0.34, 0.36, 0.86],
         [0.39, 0.41, 0.43, 0.86],
