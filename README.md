@@ -19,7 +19,7 @@ The first test-build target is **Android ARM64 (arm64-v8a)**. Desktop targets re
 - Saved-world GPU uploads are deferred until after the first loading frame and synchronized incrementally, rather than uploading the whole saved world inside renderer construction.
 - Neighbor-aware face culling across all six chunk-section directions.
 - One merged GPU vertex buffer per chunk column, with distance-based chunk render culling.
-- CPU texture-atlas packing and a prototype GPU atlas with nearest-neighbor sampling.
+- CPU texture-atlas packing, PNG decoding, and nearest-neighbor GPU sampling. Android now checks `Android/media/com.spike26.minecraftbookedition/game/resource_packs/` for an extracted Bedrock resource pack containing `textures/terrain_texture.json` and the referenced PNGs; it loads the grass-top, dirt, and stone tiles when present, otherwise it safely falls back to the generated prototype atlas.
 - Face normals and directional lighting.
 - First-person player controller with gravity, jumping, sprinting, and axis-separated voxel collision.
 - 3D DDA block raycasting, touch-tap/mouse block breaking, and long-press prototype stone placement.
@@ -40,9 +40,17 @@ These are API foundations, not a completed runtime. Package discovery, dependenc
 
 ## Current limitations
 
-This is **not yet a Bedrock-compatible game**. It starts with a 9 × 9 prototype chunk area and expands around the player incrementally, but does not unload distant chunks yet. The terrain texture atlas is generated test content, not a real Bedrock resource-pack atlas. The mobile HUD uses a generated Bedrock-inspired stone pixel pattern until the consent-based vanilla asset downloader and official UI texture loader are integrated. The custom Booking save file is not a Bedrock world format. Remaining work includes disk-backed chunk unloading/region storage, production terrain and biome generation, Bedrock block-state property definitions and exact palette serialization, lighting propagation, entity rendering/simulation, inventory and item systems, inventory persistence, networking, and full touch movement controls. The player and block-interaction systems are early foundations, not complete Bedrock gameplay.
+This is **not yet a Bedrock-compatible game**. It starts with a 9 × 9 prototype chunk area and expands around the player incrementally, but does not unload distant chunks yet. The resource-pack reader currently accepts extracted folders (not `.mcpack` archives), searches the resource-pack directory and one level of child folders, and imports only grass-top, dirt, and stone terrain textures; full block texture variants, animation, mipmaps, resource-pack priority/overrides, and automatic asset downloading are not implemented. The mobile HUD uses a generated Bedrock-inspired stone pixel pattern until the official UI texture loader is integrated. The custom Booking save file is not a Bedrock world format. Remaining work includes disk-backed chunk unloading/region storage, production terrain and biome generation, Bedrock block-state property definitions and exact palette serialization, lighting propagation, entity rendering/simulation, inventory and item systems, inventory persistence, networking, and full touch movement controls. The player and block-interaction systems are early foundations, not complete Bedrock gameplay.
 
 Bedrock world, resource-pack, add-on, and server compatibility must be implemented and verified subsystem by subsystem. The project does not reuse proprietary RenderDragon code or game binaries.
+
+## Importing an extracted Bedrock resource pack
+
+Copy an extracted resource-pack folder into:
+
+`Android/media/com.spike26.minecraftbookedition/game/resource_packs/<pack-name>/`
+
+The folder should contain `textures/terrain_texture.json` and the PNG files referenced by its `texture_data` entries. The current prototype importer looks for `grass_top` (or `grass` / `grass_block`), `dirt`, and `stone`. It does not download proprietary game assets, extract `.mcpack` archives, or access another app's private Minecraft installation. If no compatible extracted pack is found, the renderer uses its built-in test atlas.
 
 ## Android test build
 
