@@ -353,6 +353,9 @@ pub fn android_main(app: AndroidApp) {
     frame.camera.yaw = player.yaw();
     frame.camera.pitch = player.pitch();
     let mut renderer_state = None;
+    // Retry transient EGL/window-surface failures instead of leaving a black screen.
+    let mut renderer_retry_at: Option<Instant> = None;
+    let mut renderer_retry_attempts: u8 = 0;
     let mut pressed_keys = HashSet::new();
     let mut active_touches: HashMap<u64, (f64, f64)> = HashMap::new();
     let mut touch_start_positions: HashMap<u64, (f64, f64)> = HashMap::new();
@@ -390,14 +393,16 @@ pub fn android_main(app: AndroidApp) {
                             "Renderer: OpenGL ES renderer initialized successfully",
                         );
                         renderer_state = Some((window, renderer));
+                        renderer_retry_at = None;
+                        renderer_retry_attempts = 0;
                     }
                     Err(error) => {
                         log::error!("OpenGL ES renderer initialization failed: {error}");
                         book_renderer_opengl::record_android_diagnostic(
-                            &format!(
-                                "Renderer ERROR: initialization failed; keeping Android event loop alive and waiting for the next resume: {error}"
-                            ),
+                            &format!("Renderer ERROR: initialization failed; scheduling automatic retry: {error}"),
                         );
+                        renderer_retry_attempts = renderer_retry_attempts.saturating_add(1);
+                        renderer_retry_at = Some(Instant::now() + Duration::from_secs(1));
                     }
                 }
             }
@@ -413,7 +418,11 @@ pub fn android_main(app: AndroidApp) {
                 }
             } else {
                 next_frame_deadline = None;
-                active_loop.set_control_flow(ControlFlow::Wait);
+                if let Some(retry_at) = renderer_retry_at {
+                    active_loop.set_control_flow(ControlFlow::WaitUntil(retry_at));
+                } else {
+                    active_loop.set_control_flow(ControlFlow::Wait);
+                }
             }
         }
         Event::Suspended => {
@@ -433,6 +442,8 @@ pub fn android_main(app: AndroidApp) {
                 "Android lifecycle: Suspended; releasing renderer",
             );
             renderer_state = None;
+            renderer_retry_at = None;
+            renderer_retry_attempts = 0;
             next_frame_deadline = None;
             active_loop.set_control_flow(ControlFlow::Wait);
             book_renderer_opengl::record_android_diagnostic(&format!(
@@ -720,6 +731,8 @@ pub fn android_main(app: AndroidApp) {
                             &format!("Renderer ERROR: frame failed; renderer released: {error}"),
                         );
                         renderer_state = None;
+                        renderer_retry_attempts = renderer_retry_attempts.saturating_add(1);
+                        renderer_retry_at = Some(Instant::now() + Duration::from_secs(1));
                     }
                 }
                 _ => {}
@@ -813,7 +826,43 @@ pub fn android_main(app: AndroidApp) {
                 }
             } else {
                 next_frame_deadline = None;
-                active_loop.set_control_flow(ControlFlow::Wait);
+                if let Some(retry_at) = renderer_retry_at {
+                    if Instant::now() >= retry_at {
+                        book_renderer_opengl::record_android_diagnostic("Renderer: retrying Android EGL/OpenGL initialization");
+                        match OpenGlRenderer::new(
+                            active_loop,
+                            "Minecraft Book Edition — Pre-Alpha 1.2.0",
+                            1280,
+                            720,
+                            &engine,
+                        ) {
+                            Ok((window, renderer)) => {
+                                log::info!("OpenGL ES renderer recovered after retry");
+                                book_renderer_opengl::record_android_diagnostic("Renderer: automatic retry succeeded");
+                                renderer_state = Some((window, renderer));
+                                renderer_retry_at = None;
+                                renderer_retry_attempts = 0;
+                                if let Some((window, _)) = renderer_state.as_ref() {
+                                    window.request_redraw();
+                                }
+                            }
+                            Err(error) => {
+                                renderer_retry_attempts = renderer_retry_attempts.saturating_add(1);
+                                let backoff_seconds = (1_u64 << renderer_retry_attempts.min(4)).min(16);
+                                renderer_retry_at = Some(Instant::now() + Duration::from_secs(backoff_seconds));
+                                log::error!("OpenGL ES renderer retry {} failed: {error}", renderer_retry_attempts);
+                                book_renderer_opengl::record_android_diagnostic(&format!("Renderer ERROR: retry {} failed; next retry in {backoff_seconds}s: {error}", renderer_retry_attempts));
+                            }
+                        }
+                    }
+                    if renderer_state.is_none() {
+                        if let Some(retry_at) = renderer_retry_at {
+                            active_loop.set_control_flow(ControlFlow::WaitUntil(retry_at));
+                        }
+                    }
+                } else {
+                    active_loop.set_control_flow(ControlFlow::Wait);
+                }
             }
         }
         Event::LoopExiting => {
