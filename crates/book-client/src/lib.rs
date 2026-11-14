@@ -500,6 +500,28 @@ pub fn android_main(app: AndroidApp) {
                         "Android window focus changed: focused={focused}"
                     ));
                 }
+                WindowEvent::Resized(size) => {
+                    // Android may resize the native window after immersive fullscreen
+                    // is applied or system bars temporarily change visibility.
+                    // Keep the EGL surface and pixel-space HUD buffers in sync.
+                    if size.width > 0 && size.height > 0 {
+                        let resize_error = renderer_state
+                            .as_mut()
+                            .and_then(|(_, renderer)| renderer.resize(size.width, size.height).err());
+                        if let Some(error) = resize_error {
+                            log::error!("Android renderer resize failed: {error}");
+                            book_renderer_opengl::record_android_diagnostic(
+                                &format!("Renderer ERROR: resize failed; scheduling recovery: {error}"),
+                            );
+                            renderer_state = None;
+                            renderer_retry_attempts = renderer_retry_attempts.saturating_add(1);
+                            renderer_retry_at = Some(Instant::now() + Duration::from_secs(1));
+                        }
+                        if let Some((window, _)) = renderer_state.as_ref() {
+                            window.request_redraw();
+                        }
+                    }
+                }
                 WindowEvent::CloseRequested => {
                     log::info!("Android window requested close; releasing renderer");
                     book_renderer_opengl::record_android_diagnostic(

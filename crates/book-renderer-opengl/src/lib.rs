@@ -484,6 +484,61 @@ impl OpenGlRenderer {
         }
     }
 
+    /// Resizes the EGL surface and rebuilds screen-space buffers for Android window changes.
+    /// The fullscreen/immersive transition can produce a new physical window size.
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
+        if width == 0 || height == 0 {
+            return Ok(());
+        }
+
+        self.display.resize((width, height));
+        let (framebuffer_width, framebuffer_height) = self.display.get_framebuffer_dimensions();
+        if framebuffer_width == 0 || framebuffer_height == 0 {
+            return Ok(());
+        }
+
+        self.debug_overlay_vertices = build_debug_overlay_vertices(
+            framebuffer_width,
+            framebuffer_height,
+            self.fps,
+            self.last_frame_ms,
+            self.visible_chunk_count,
+            self.chunk_meshes.len(),
+            self.chunk_meshes.iter().map(|mesh| mesh.vertices.len()).sum(),
+        );
+        self.debug_overlay_buffer = VertexBuffer::dynamic(
+            &self.display,
+            &self.debug_overlay_vertices,
+        ).map_err(|error| RendererError::new(format!("Debug overlay resize buffer: {error}")))?;
+
+        let (completed, total) = self.loading_progress.unwrap_or((0, 1));
+        let loading_vertices = build_loading_overlay_vertices(
+            framebuffer_width,
+            framebuffer_height,
+            completed,
+            total,
+        );
+        self.loading_overlay_buffer = VertexBuffer::dynamic(
+            &self.display,
+            &loading_vertices,
+        ).map_err(|error| RendererError::new(format!("Loading overlay resize buffer: {error}")))?;
+
+        #[cfg(target_os = "android")]
+        {
+            // The mobile HUD is regenerated with the current framebuffer size on
+            // the next draw. Its vertex count can vary with the physical screen size.
+            self.mobile_controls_signature = None;
+        }
+
+        self.debug_overlay_updated = Instant::now();
+        #[cfg(target_os = "android")]
+        record_android_diagnostic(&format!(
+            "Renderer: resized EGL surface and HUD buffers to {}x{}",
+            framebuffer_width, framebuffer_height
+        ));
+        Ok(())
+    }
+
     /// Removes the temporary loading screen after the initial spawn area is ready.
     pub fn finish_loading(&mut self) {
         self.loading_progress = None;
@@ -568,10 +623,15 @@ impl OpenGlRenderer {
             let vertices = build_mobile_controls_vertices(
                 layout, state, settings, self.debug_visible,
             );
-            if vertices.len() != self.mobile_controls_buffer.len() {
-                return Err(RendererError::new("Mobile HUD vertex count changed unexpectedly"));
+            if vertices.len() == self.mobile_controls_buffer.len() {
+                self.mobile_controls_buffer.write(&vertices);
+            } else {
+                // Device/window sizes can change the tiled button geometry and
+                // therefore its vertex count; replace the VBO instead of failing
+                // the entire frame and dropping the renderer.
+                self.mobile_controls_buffer = VertexBuffer::dynamic(&self.display, &vertices)
+                    .map_err(|error| RendererError::new(format!("Mobile HUD resize buffer: {error}")))?;
             }
-            self.mobile_controls_buffer.write(&vertices);
             self.mobile_controls_signature = Some(signature);
         }
 
