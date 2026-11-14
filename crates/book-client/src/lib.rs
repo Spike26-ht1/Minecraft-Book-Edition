@@ -215,6 +215,11 @@ pub fn android_main(app: AndroidApp) {
     let mut touch_start_times: HashMap<u64, Instant> = HashMap::new();
     let mut next_frame_deadline: Option<Instant> = None;
     let mut last_simulation_tick = Instant::now();
+    let spawn_position = player.position();
+    let mut last_stream_chunk = (
+        (spawn_position[0].floor() as i32).div_euclid(16),
+        (spawn_position[2].floor() as i32).div_euclid(16),
+    );
     let result = event_loop.run(move |event, active_loop| match event {
         Event::Resumed => {
             log::info!("Android lifecycle: Resumed");
@@ -446,6 +451,29 @@ pub fn android_main(app: AndroidApp) {
                     },
                     delta_seconds,
                 );
+
+                let player_position = player.position();
+                let current_stream_chunk = (
+                    (player_position[0].floor() as i32).div_euclid(16),
+                    (player_position[2].floor() as i32).div_euclid(16),
+                );
+                if current_stream_chunk != last_stream_chunk {
+                    let generated = engine.ensure_prototype_chunks_around(
+                        player_position[0].floor() as i32,
+                        player_position[2].floor() as i32,
+                        4,
+                    );
+                    last_stream_chunk = current_stream_chunk;
+                    if generated > 0 {
+                        log::info!("Booking streamed {generated} new chunk columns");
+                        if let Some((window, renderer)) = renderer_state.as_mut() {
+                            if let Err(error) = renderer.sync_world(&engine) {
+                                log::error!("Renderer sync after chunk streaming failed: {error}");
+                            }
+                            window.request_redraw();
+                        }
+                    }
+                }
 
                 if pressed_keys.contains(&KeyCode::ArrowLeft) { player.look(-LOOK_STEP, 0.0); }
                 if pressed_keys.contains(&KeyCode::ArrowRight) { player.look(LOOK_STEP, 0.0); }
