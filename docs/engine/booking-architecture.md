@@ -14,7 +14,7 @@ registries, terrain generation, and CPU-side preparation of renderable chunks.
   section-mesh preparation.
 - **book-renderer-api:** graphics-backend contract.
 - **book-renderer-opengl:** OpenGL / OpenGL ES backend and GPU presentation.
-- **book-client:** Android application lifecycle, input event loop, world loading, autosaving, and player-centered chunk expansion.
+- **book-client:** Android application lifecycle, input event loop, world loading, autosaving, player-centered chunk expansion, and multi-touch mobile controls.
 
 The renderer must consume world meshes prepared by Booking. Terrain generation
 and block registry logic must not be duplicated inside graphics backends.
@@ -34,6 +34,18 @@ and saves again when the activity is suspended or the event loop exits. Player
 position and view direction are stored separately and validated against the
 loaded world before restoration. These are project-specific formats and are
 not compatible with Bedrock world files.
+
+## Mobile controls
+
+The Android client shares a pixel-coordinate layout between touch hit testing
+and the renderer. A left virtual joystick supplies normalized strafe/forward
+axes. Four independent right-side buttons provide jump, held sprint, mine, and
+place actions. Touch identifiers are routed independently so the movement
+stick can remain held while another finger looks around or presses an action.
+The visible HUD currently uses generated stone-like pixel panels; it does not
+ship Mojang's original UI sprites. Those will be loaded from the local vanilla
+resource-pack installation only after the consent-based asset downloader and
+texture loader are implemented.
 
 ## Graphics targets
 
