@@ -517,8 +517,18 @@ pub fn android_main(app: AndroidApp) {
                             let role = if let Some(layout) = layout {
                                 let point = [location.0 as f32, location.1 as f32];
                                 if layout.settings.contains(point) {
-                                    frame.settings.menu_open = !frame.settings.menu_open;
+                                    let opening_menu = !frame.settings.menu_open;
+                                    frame.settings.menu_open = opening_menu;
                                     frame.mobile_controls = MobileControlsState::default();
+                                    if opening_menu {
+                                        // Release held movement/action touches before displaying
+                                        // the settings overlay.
+                                        active_touches.clear();
+                                        touch_start_positions.clear();
+                                        touch_start_times.clear();
+                                        touch_roles.clear();
+                                        jump_queued = false;
+                                    }
                                     if let Some((window, _)) = renderer_state.as_ref() {
                                         window.request_redraw();
                                     }
