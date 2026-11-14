@@ -1,5 +1,7 @@
 use serde::Deserialize;
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 
 /// Parsed subset of a Bedrock-style terrain_texture.json file.
 /// Texture declarations are retained as JSON because Bedrock supports multiple shapes.
@@ -80,6 +82,95 @@ impl TextureImage {
             rgba: image.into_raw(),
         })
     }
+}
+
+/// Errors encountered while loading a Bedrock resource-pack terrain atlas.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResourcePackError {
+    pub message: String,
+}
+
+impl std::fmt::Display for ResourcePackError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ResourcePackError {}
+
+/// Loads the prototype grass/dirt/stone tiles from an extracted Bedrock resource pack.
+/// The supplied directory may be a pack root or a resource_packs directory containing
+/// one-level-deep extracted packs. ZIP/MC_PACK extraction is intentionally handled by
+/// the launcher, not by this filesystem reader.
+pub fn load_bedrock_terrain_atlas(root: &Path) -> Result<TextureAtlas, ResourcePackError> {
+    let mut candidates = vec![root.to_path_buf()];
+    let entries = fs::read_dir(root).map_err(|error| ResourcePackError {
+        message: format!("Cannot read resource-pack directory {}: {error}", root.display()),
+    })?;
+    for entry in entries.flatten() {
+        if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+            candidates.push(entry.path());
+        }
+    }
+
+    let mut failures = Vec::new();
+    for pack_root in candidates {
+        let manifest_path = pack_root.join("textures").join("terrain_texture.json");
+        let manifest_path = if manifest_path.is_file() {
+            manifest_path
+        } else {
+            let direct = pack_root.join("terrain_texture.json");
+            if direct.is_file() { direct } else { continue; }
+        };
+        match load_atlas_from_manifest(&pack_root, &manifest_path) {
+            Ok(atlas) => return Ok(atlas),
+            Err(error) => failures.push(error.message),
+        }
+    }
+
+    Err(ResourcePackError {
+        message: if failures.is_empty() {
+            format!("No terrain_texture.json found in {} or its immediate pack folders", root.display())
+        } else {
+            failures.join("; ")
+        },
+    })
+}
+
+fn load_atlas_from_manifest(root: &Path, manifest_path: &Path) -> Result<TextureAtlas, ResourcePackError> {
+    let json = fs::read_to_string(manifest_path).map_err(|error| ResourcePackError {
+        message: format!("Cannot read {}: {error}", manifest_path.display()),
+    })?;
+    let manifest = TerrainTextureManifest::from_json(&json).map_err(|error| ResourcePackError {
+        message: format!("Invalid terrain_texture.json: {error}"),
+    })?;
+
+    let mut images = Vec::with_capacity(3);
+    for (key, aliases) in [
+        ("book:grass_block", &["grass_top", "grass", "grass_block"][..]),
+        ("book:dirt", &["dirt"][..]),
+        ("book:stone", &["stone"][..]),
+    ] {
+        let entry = aliases.iter().find_map(|alias| manifest.texture_path(alias).map(|path| (*alias, path)))
+            .ok_or_else(|| ResourcePackError { message: format!("Required terrain texture missing: {}", aliases.join(" / ")) })?;
+        let relative = Path::new(entry.1);
+        if relative.is_absolute() || relative.components().any(|part| matches!(part, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
+            return Err(ResourcePackError { message: format!("Unsafe resource-pack texture path: {}", entry.1) });
+        }
+        let mut texture_path = root.join(relative);
+        if texture_path.extension().is_none() { texture_path.set_extension("png"); }
+        let bytes = fs::read(&texture_path).map_err(|error| ResourcePackError {
+            message: format!("Cannot read texture {}: {error}", texture_path.display()),
+        })?;
+        let image = TextureImage::from_png(key, &bytes).map_err(|error| ResourcePackError {
+            message: format!("Cannot decode texture {}: {}", texture_path.display(), error.message),
+        })?;
+        images.push(image);
+    }
+
+    TextureAtlas::build_grid(images, 16, 16).map_err(|error| ResourcePackError {
+        message: format!("Could not build Bedrock terrain atlas: {error:?}"),
+    })
 }
 
 /// CPU-side atlas data. The graphics backend is responsible for uploading it.
