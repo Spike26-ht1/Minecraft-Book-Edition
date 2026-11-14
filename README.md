@@ -14,7 +14,9 @@ The first test-build target is **Android ARM64 (arm64-v8a)**. Desktop targets re
 - **Booking Engine** owns block registration, loaded chunks, prototype terrain generation, player simulation, persistence, and CPU-side world mesh preparation.
 - 16 × 16 × 16 chunk sections, a world-coordinate chunk manager, and compact palette-backed block-state storage.
 - Multi-section prototype terrain with a bedrock floor, stone/dirt layers, a grass surface, and deterministic smooth height variation.
-- Player-centered chunk expansion: new terrain columns are generated one at a time after the player crosses a chunk boundary, spreading CPU meshing and GPU uploads across frames. Loaded chunks are not unloaded yet.
+- Startup prepares only the spawn chunk before opening the Android render loop. The remaining 80 columns in the initial 9 × 9 area are generated and uploaded one column per frame behind a temporary loading overlay. Later player-centered expansion also runs incrementally. Loaded chunks are not unloaded yet.
+- Native Android launch splash plus an in-engine `BOOKING / CARREGANDO MUNDO` screen with progress feedback. The in-engine screen stays visible until the initial world data and its GPU meshes are ready.
+- Saved-world GPU uploads are deferred until after the first loading frame and synchronized incrementally, rather than uploading the whole saved world inside renderer construction.
 - Neighbor-aware face culling across all six chunk-section directions.
 - One merged GPU vertex buffer per chunk column, with distance-based chunk render culling.
 - CPU texture-atlas packing and a prototype GPU atlas with nearest-neighbor sampling.
@@ -46,7 +48,7 @@ Bedrock world, resource-pack, add-on, and server compatibility must be implement
 
 - Android 8.0 or newer (API 26).
 - ARM64 / arm64-v8a.
-- Landscape-only immersive fullscreen mode.
+- Landscape-only immersive fullscreen mode with a native Android startup splash theme and a temporary in-engine loading screen.
 - OpenGL ES 3.0.
 - F3 on a connected physical keyboard toggles the debug overlay.
 - Left analog stick: move and strafe.
