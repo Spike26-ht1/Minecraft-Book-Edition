@@ -1,7 +1,7 @@
 use book_assets::{TextureAtlas, TextureImage};
 use booking_engine::BookingEngine;
 use book_core::BlockId;
-use book_renderer_api::{CameraState, GraphicsApi, MobileControlsLayout, MobileControlsState, RendererBackend, RendererError, RendererInfo, RenderFrame};
+use book_renderer_api::{CameraState, GraphicsApi, MobileControlsLayout, MobileControlsState, RenderSettings, RendererBackend, RendererError, RendererInfo, RenderFrame};
 #[cfg(not(target_os = "android"))]
 use glium::backend::glutin::SimpleWindowBuilder;
 #[cfg(target_os = "android")]
@@ -228,6 +228,12 @@ pub struct OpenGlRenderer {
     last_frame_ms: f32,
     debug_visible: bool,
     visible_chunk_count: usize,
+    debug_overlay_buffer: VertexBuffer<DebugVertex>,
+    debug_overlay_vertices: Vec<DebugVertex>,
+    #[cfg(target_os = "android")]
+    mobile_controls_buffer: VertexBuffer<DebugVertex>,
+    #[cfg(target_os = "android")]
+    mobile_controls_vertices: Vec<DebugVertex>,
     #[cfg(target_os = "android")]
     first_frame_logged: bool,
 }
@@ -286,14 +292,41 @@ impl OpenGlRenderer {
         let debug_program = Program::from_source(
             &display, DEBUG_VERTEX_SHADER, DEBUG_FRAGMENT_SHADER, None,
         ).map_err(|error| RendererError::new(format!("Debug overlay shader: {error}")))?;
+
+        let (screen_width, screen_height) = display.get_framebuffer_dimensions();
+        let mut debug_overlay_vertices =
+            build_debug_overlay_vertices(screen_width, screen_height, 0, 0.0, 0, 0);
+        let debug_overlay_buffer = VertexBuffer::dynamic(&display, &debug_overlay_vertices)
+            .map_err(|error| RendererError::new(format!("Debug overlay buffer allocation: {error}")))?;
+
         #[cfg(target_os = "android")]
-        record_android_diagnostic("Renderer: GPU resources and shader programs are ready");
+        let (mobile_controls_buffer, mobile_controls_vertices) = {
+            let layout = MobileControlsLayout::new(screen_width, screen_height);
+            let mut vertices = build_mobile_controls_vertices(
+                layout,
+                MobileControlsState::default(),
+                RenderSettings::default(),
+                false,
+            );
+            let buffer = VertexBuffer::dynamic(&display, &vertices)
+                .map_err(|error| RendererError::new(format!("Mobile controls buffer allocation: {error}")))?;
+            (buffer, vertices)
+        };
+
+        #[cfg(target_os = "android")]
+        record_android_diagnostic("Renderer: GPU resources and persistent HUD buffers are ready");
         let now = Instant::now();
         Ok((window, Self {
             display, chunk_meshes, program, atlas, debug_program,
             last_frame: now, fps_window_started: now,
             frames_in_window: 0, fps: 0, last_frame_ms: 0.0, debug_visible: false,
             visible_chunk_count: 0,
+            debug_overlay_buffer,
+            debug_overlay_vertices,
+            #[cfg(target_os = "android")]
+            mobile_controls_buffer,
+            #[cfg(target_os = "android")]
+            mobile_controls_vertices,
             #[cfg(target_os = "android")]
             first_frame_logged: false,
         }))
@@ -385,43 +418,30 @@ impl OpenGlRenderer {
         }
     }
 
-    fn draw_debug_overlay(&self, target: &mut glium::Frame) -> Result<(), RendererError> {
+    fn draw_debug_overlay(&mut self, target: &mut glium::Frame) -> Result<(), RendererError> {
         let vertex_count: usize = self.chunk_meshes.iter().map(|mesh| mesh.vertices.len()).sum();
-        let lines = [
-            "MINECRAFT BOOK EDITION 26.60".to_owned(),
-            format!("FPS: {}", self.fps),
-            format!("FRAME: {:.2} MS", self.last_frame_ms),
-            "RENDERER: BOOKING".to_owned(),
-            "API: OPENGL ES / OPENGL".to_owned(),
-            format!("CHUNKS: {} / {}", self.visible_chunk_count, self.chunk_meshes.len()),
-            "BLOCKS: PROCEDURAL WORLD".to_owned(),
-            format!("VERTICES: {vertex_count}"),
-            "F3: HIDE DEBUG".to_owned(),
-        ];
-        let scale = 2.0_f32;
-        let char_width = 12.0;
-        let line_height = 18.0;
-        let panel_width = lines.iter()
-            .map(|line| line.chars().count() as f32 * char_width)
-            .fold(0.0_f32, f32::max) + 20.0;
-        let panel_height = lines.len() as f32 * line_height + 18.0;
-        let mut vertices = Vec::new();
-        push_rect(&mut vertices, 10.0, 10.0, panel_width, panel_height,
-                  [0.015, 0.02, 0.025, 0.78]);
-        for (line_index, line) in lines.iter().enumerate() {
-            let y = 19.0 + line_index as f32 * line_height;
-            let mut x = 19.0;
-            for character in line.chars() {
-                draw_character(&mut vertices, character, x, y, scale);
-                x += char_width;
-            }
-        }
         let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
-        let buffer = VertexBuffer::new(&self.display, &vertices)
-            .map_err(|error| RendererError::new(format!("Debug overlay buffer: {error}")))?;
-        let params = DrawParameters { blend: Blend::alpha_blending(), ..DrawParameters::default() };
+        self.debug_overlay_vertices.clear();
+        self.debug_overlay_vertices.extend(build_debug_overlay_vertices(
+            screen_width,
+            screen_height,
+            self.fps,
+            self.last_frame_ms,
+            self.visible_chunk_count,
+            vertex_count,
+        ));
+
+        if self.debug_overlay_vertices.len() != self.debug_overlay_buffer.len() {
+            return Err(RendererError::new("Debug overlay vertex count changed unexpectedly"));
+        }
+        self.debug_overlay_buffer.write(&self.debug_overlay_vertices);
+
+        let params = DrawParameters {
+            blend: Blend::alpha_blending(),
+            ..DrawParameters::default()
+        };
         target.draw(
-            &buffer,
+            &self.debug_overlay_buffer,
             NoIndices(glium::index::PrimitiveType::TrianglesList),
             &self.debug_program,
             &uniform! { u_screen: [screen_width as f32, screen_height as f32] },
@@ -431,37 +451,29 @@ impl OpenGlRenderer {
 
     #[cfg(target_os = "android")]
     fn draw_mobile_controls(
-        &self,
+        &mut self,
         target: &mut glium::Frame,
         state: MobileControlsState,
+        settings: RenderSettings,
     ) -> Result<(), RendererError> {
         let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
         let layout = MobileControlsLayout::new(screen_width, screen_height);
-        let mut vertices = Vec::with_capacity(2_400);
+        self.mobile_controls_vertices.clear();
+        self.mobile_controls_vertices.extend(build_mobile_controls_vertices(
+            layout, state, settings, self.debug_visible,
+        ));
 
-        // Left virtual joystick: pixel-stepped stone rim and responsive thumb.
-        push_pixel_disc(
-            &mut vertices,
-            layout.joystick_center,
-            layout.joystick_radius,
-            state.strafe.abs() > 0.02 || state.forward.abs() > 0.02,
-            [state.strafe, state.forward],
-        );
+        if self.mobile_controls_vertices.len() != self.mobile_controls_buffer.len() {
+            return Err(RendererError::new("Mobile HUD vertex count changed unexpectedly"));
+        }
+        self.mobile_controls_buffer.write(&self.mobile_controls_vertices);
 
-        push_mobile_button(&mut vertices, layout.jump, "PULO", state.jump_pressed);
-        push_mobile_button(&mut vertices, layout.sprint, "CORRER", state.sprint_pressed);
-        push_mobile_button(&mut vertices, layout.break_block, "MINAR", state.break_pressed);
-        push_mobile_button(&mut vertices, layout.place_block, "COLOCAR", state.place_pressed);
-        push_mobile_button(&mut vertices, layout.debug, "DBG", self.debug_visible);
-
-        let buffer = VertexBuffer::new(&self.display, &vertices)
-            .map_err(|error| RendererError::new(format!("Mobile controls buffer: {error}")))?;
         let params = DrawParameters {
             blend: Blend::alpha_blending(),
             ..DrawParameters::default()
         };
         target.draw(
-            &buffer,
+            &self.mobile_controls_buffer,
             NoIndices(glium::index::PrimitiveType::TrianglesList),
             &self.debug_program,
             &uniform! { u_screen: [screen_width as f32, screen_height as f32] },
@@ -503,7 +515,7 @@ impl RendererBackend for OpenGlRenderer {
         };
         let (width, height) = self.display.get_framebuffer_dimensions();
         let view_projection = voxel_camera_matrix(width as f32 / height.max(1) as f32, frame.camera);
-        let render_distance = 4.0_f32 * 16.0;
+        let render_distance = frame.settings.render_distance_chunks as f32 * 16.0;
         let render_distance_squared = render_distance * render_distance;
         self.visible_chunk_count = 0;
         for chunk in &self.chunk_meshes {
@@ -529,7 +541,7 @@ impl RendererBackend for OpenGlRenderer {
         }
         if self.debug_visible { self.draw_debug_overlay(&mut target)?; }
         #[cfg(target_os = "android")]
-        self.draw_mobile_controls(&mut target, frame.mobile_controls)?;
+        self.draw_mobile_controls(&mut target, frame.mobile_controls, frame.settings)?;
         target.finish().map_err(|error| RendererError::new(format!("OpenGL present: {error}")))?;
         #[cfg(target_os = "android")]
         if !self.first_frame_logged {
@@ -593,6 +605,176 @@ mod camera_tests {
         for aspect in [0.5, 1.0, 1.777, 2.5] {
             let matrix = voxel_camera_matrix(aspect, CameraState::default());
             assert!(matrix.iter().flatten().all(|value| value.is_finite()));
+        }
+    }
+}
+
+fn build_debug_overlay_vertices(
+    screen_width: u32,
+    _screen_height: u32,
+    fps: u32,
+    frame_ms: f32,
+    visible_chunks: usize,
+    vertex_count: usize,
+) -> Vec<DebugVertex> {
+    let lines = [
+        "MINECRAFT BOOK EDITION 26.60".to_owned(),
+        format!("FPS: {:>3}", fps.min(999)),
+        format!("FRAME: {:>6.2} MS", frame_ms.clamp(0.0, 999.99)),
+        "RENDERER: BOOKING".to_owned(),
+        "API: OPENGL ES / OPENGL".to_owned(),
+        format!("CHUNKS: {:>3} / {:>3}", visible_chunks.min(999), 126),
+        "BLOCKS: PROCEDURAL WORLD".to_owned(),
+        format!("VERTICES: {:>9}", vertex_count.min(999_999_999)),
+        "F3: HIDE DEBUG".to_owned(),
+    ];
+    let scale = 2.0_f32;
+    let char_width = 12.0;
+    let line_height = 18.0;
+    let panel_width = lines.iter()
+        .map(|line| line.chars().count() as f32 * char_width)
+        .fold(0.0_f32, f32::max) + 20.0;
+    let panel_height = lines.len() as f32 * line_height + 18.0;
+    let mut vertices = Vec::with_capacity(8_000);
+    push_rect(&mut vertices, 10.0, 10.0, panel_width.min(screen_width as f32 - 20.0), panel_height,
+              [0.015, 0.02, 0.025, 0.78]);
+    for (line_index, line) in lines.iter().enumerate() {
+        let y = 19.0 + line_index as f32 * line_height;
+        let mut x = 19.0;
+        for character in line.chars() {
+            draw_character(&mut vertices, character, x, y, scale);
+            x += char_width;
+        }
+    }
+    vertices
+}
+
+#[cfg(target_os = "android")]
+fn build_mobile_controls_vertices(
+    layout: MobileControlsLayout,
+    state: MobileControlsState,
+    settings: RenderSettings,
+    debug_visible: bool,
+) -> Vec<DebugVertex> {
+    let mut vertices = Vec::with_capacity(8_000);
+    push_pixel_disc(
+        &mut vertices,
+        layout.joystick_center,
+        layout.joystick_radius,
+        state.strafe.abs() > 0.02 || state.forward.abs() > 0.02,
+        [state.strafe, state.forward],
+    );
+
+    push_mobile_button(&mut vertices, layout.jump, "PULO", state.jump_pressed);
+    push_mobile_button(&mut vertices, layout.sprint, "CORRER", state.sprint_pressed);
+    push_mobile_button(&mut vertices, layout.break_block, "MINAR", state.break_pressed);
+    push_mobile_button(&mut vertices, layout.place_block, "COLOCAR", state.place_pressed);
+    push_mobile_button(&mut vertices, layout.debug, "DBG", debug_visible);
+    push_mobile_button(&mut vertices, layout.settings, "CFG", settings.menu_open);
+
+    push_settings_menu(&mut vertices, layout, settings);
+    vertices
+}
+
+#[cfg(target_os = "android")]
+fn push_settings_menu(
+    vertices: &mut Vec<DebugVertex>,
+    layout: MobileControlsLayout,
+    settings: RenderSettings,
+) {
+    let visible = settings.menu_open;
+    let panel = layout.settings_panel;
+    let alpha = if visible { 0.97 } else { 0.0 };
+    push_rect(vertices, panel.x, panel.y, panel.width, panel.height,
+        [0.015, 0.02, 0.025, alpha]);
+    push_rect(vertices, panel.x + 5.0, panel.y + 5.0, panel.width - 10.0, panel.height - 10.0,
+        [0.13, 0.15, 0.17, if visible { 0.98 } else { 0.0 }]);
+    let text_color = if visible { [0.94, 0.97, 1.0, 1.0] } else { [0.0, 0.0, 0.0, 0.0] };
+    draw_text_colored(vertices, "CONFIGURACOES DE TESTE",
+        panel.x + 22.0, panel.y + 28.0, 2.3, text_color);
+    push_menu_option(vertices, layout.settings_close, "X", false, visible);
+
+    draw_text_colored(vertices, "LIMITE DE FPS",
+        panel.x + 22.0, panel.y + panel.height * 0.29, 1.8, text_color);
+    let fps_labels = ["30 FPS", "60 FPS", "90 FPS", "SEM LIMITE"];
+    for index in 0..layout.fps_options.len() {
+        let selected = settings.fps_limit == RenderSettings::FPS_OPTIONS[index];
+        push_menu_option(vertices, layout.fps_options[index], fps_labels[index], selected, visible);
+    }
+
+    draw_text_colored(vertices, "DISTANCIA DE RENDERIZACAO",
+        panel.x + 22.0, panel.y + panel.height * 0.59, 1.8, text_color);
+    for index in 0..layout.distance_options.len() {
+        let value = RenderSettings::DISTANCE_OPTIONS[index];
+        let label = format!("{value} CHUNKS");
+        let selected = settings.render_distance_chunks == value;
+        push_menu_option(vertices, layout.distance_options[index], &label, selected, visible);
+    }
+    if visible {
+        draw_text_colored(vertices, "MAIOR DISTANCIA = MAIS CUSTO NA GPU",
+            panel.x + 22.0, panel.y + panel.height - 28.0, 1.15, text_color);
+    } else {
+        // Keep a fixed vertex count while the panel is closed, so the persistent
+        // GPU buffer never needs to be resized during gameplay.
+        draw_text_colored(vertices, "MAIOR DISTANCIA = MAIS CUSTO NA GPU",
+            panel.x + 22.0, panel.y + panel.height - 28.0, 1.15, [0.0, 0.0, 0.0, 0.0]);
+    }
+}
+
+#[cfg(target_os = "android")]
+fn push_menu_option(
+    vertices: &mut Vec<DebugVertex>,
+    rect: book_renderer_api::TouchRect,
+    label: &str,
+    selected: bool,
+    visible: bool,
+) {
+    let alpha = if visible { 0.96 } else { 0.0 };
+    push_rect(vertices, rect.x, rect.y, rect.width, rect.height,
+        [0.025, 0.035, 0.045, alpha]);
+    push_rect(vertices, rect.x + 3.0, rect.y + 3.0, rect.width - 6.0, rect.height - 6.0,
+        if visible && selected { [0.22, 0.38, 0.16, 0.98] }
+        else if visible { [0.28, 0.31, 0.34, 0.98] }
+        else { [0.0, 0.0, 0.0, 0.0] });
+    let color = if visible { [0.95, 0.97, 1.0, 1.0] } else { [0.0, 0.0, 0.0, 0.0] };
+    let scale = ((rect.width - 12.0) / (label.chars().count() as f32 * 6.0)).clamp(0.7, 1.25);
+    let text_width = label.chars().count() as f32 * 6.0 * scale;
+    draw_text_colored(vertices, label,
+        rect.x + (rect.width - text_width) * 0.5,
+        rect.y + (rect.height - 7.0 * scale) * 0.5,
+        scale,
+        color);
+}
+
+fn draw_text_colored(
+    vertices: &mut Vec<DebugVertex>,
+    text: &str,
+    mut x: f32,
+    y: f32,
+    scale: f32,
+    color: [f32; 4],
+) {
+    for character in text.chars() {
+        draw_character_colored(vertices, character, x, y, scale, color);
+        x += 6.0 * scale;
+    }
+}
+
+fn draw_character_colored(
+    vertices: &mut Vec<DebugVertex>,
+    character: char,
+    x: f32,
+    y: f32,
+    scale: f32,
+    color: [f32; 4],
+) {
+    let rows = glyph(character);
+    for (row_index, row) in rows.iter().enumerate() {
+        for column in 0..5 {
+            if row & (1 << (4 - column)) != 0 {
+                push_rect(vertices, x + column as f32 * scale,
+                    y + row_index as f32 * scale, scale, scale, color);
+            }
         }
     }
 }
