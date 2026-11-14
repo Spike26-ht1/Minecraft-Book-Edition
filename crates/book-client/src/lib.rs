@@ -374,8 +374,11 @@ pub fn android_main(app: AndroidApp) {
                             touch_start_times.insert(touch_id, Instant::now());
                             if let Some((window, renderer)) = renderer_state.as_mut() {
                                 let size = window.inner_size();
-                                if location.0 >= size.width.saturating_sub(96) as f64
-                                    && location.1 <= 64.0
+                                // The DBG control is bottom-right, away from Android's
+                                // status icons and gesture-navigation handle.
+                                if location.0 >= size.width.saturating_sub(112) as f64
+                                    && location.1 >= size.height.saturating_sub(104) as f64
+                                    && location.1 <= size.height.saturating_sub(20) as f64
                                 {
                                     renderer.toggle_debug();
                                     window.request_redraw();
@@ -408,8 +411,9 @@ pub fn android_main(app: AndroidApp) {
                                 let is_debug_area = renderer_state.as_ref()
                                     .map(|(window, _)| {
                                         let size = window.inner_size();
-                                        start.0 >= size.width.saturating_sub(96) as f64
-                                            && start.1 <= 64.0
+                                        start.0 >= size.width.saturating_sub(112) as f64
+                                            && start.1 >= size.height.saturating_sub(104) as f64
+                                            && start.1 <= size.height.saturating_sub(20) as f64
                                     })
                                     .unwrap_or(false);
                                 if is_tap && !is_debug_area {
