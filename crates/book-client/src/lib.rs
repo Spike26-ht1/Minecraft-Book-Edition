@@ -18,6 +18,14 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const PACKAGE_ID: &str = "com.spike26.minecraftbookedition";
 const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 
+fn save_world_if_available(engine: &BookingEngine, path: Option<&Path>) {
+    let Some(path) = path else { return; };
+    match engine.save_world_to_path(path) {
+        Ok(()) => log::info!("Booking world saved to {}", path.display()),
+        Err(error) => log::error!("Could not save Booking world to {}: {error}", path.display()),
+    }
+}
+
 fn initialize_android_logging() {
     android_logger::init_once(
         android_logger::Config::default()
@@ -121,7 +129,7 @@ fn initialize_storage(app: &AndroidApp) -> Option<PathBuf> {
 #[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
     initialize_android_logging();
-    let _storage_root = match initialize_storage(&app) {
+    let storage_root = match initialize_storage(&app) {
         Some(root) => {
             book_renderer_opengl::record_android_diagnostic("android_main: storage is ready");
             Some(root)
@@ -153,8 +161,48 @@ pub fn android_main(app: AndroidApp) {
         }
     };
 
+    let world_save_path = storage_root
+        .as_ref()
+        .map(|root| root.join("game/minecraftWorlds/Default/world.book"));
+    let mut world_save_enabled = world_save_path.is_some();
     let mut engine = BookingEngine::new();
-    engine.generate_prototype_terrain(4);
+    let mut world_loaded = false;
+
+    if let Some(path) = world_save_path.as_ref() {
+        if path.exists() {
+            match engine.load_world_from_path(path) {
+                Ok(()) => {
+                    world_loaded = true;
+                    log::info!("Loaded saved Booking world from {}", path.display());
+                }
+                Err(error) => {
+                    log::error!("Could not load saved Booking world: {error}");
+                    let backup_path = path.with_extension("book.corrupt");
+                    match fs::rename(path, &backup_path) {
+                        Ok(()) => log::warn!(
+                            "Moved invalid world save to {}",
+                            backup_path.display()
+                        ),
+                        Err(backup_error) => {
+                            world_save_enabled = false;
+                            log::error!(
+                                "Could not preserve invalid world save {}; autosaving disabled: {backup_error}",
+                                path.display()
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !world_loaded {
+        engine.generate_prototype_terrain(4);
+        if world_save_enabled {
+            save_world_if_available(&engine, world_save_path.as_deref());
+        }
+    }
+
     let mut player = PlayerController::spawn(&engine, 0, 0).unwrap_or_default();
     let mut frame = RenderFrame::default();
     frame.camera.position = player.camera_position();
@@ -211,6 +259,9 @@ pub fn android_main(app: AndroidApp) {
             }
         }
         Event::Suspended => {
+            if world_save_enabled {
+                save_world_if_available(&engine, world_save_path.as_deref());
+            }
             log::info!("Android lifecycle: Suspended; releasing renderer");
             book_renderer_opengl::record_android_diagnostic(
                 "Android lifecycle: Suspended; releasing renderer",
@@ -269,6 +320,9 @@ pub fn android_main(app: AndroidApp) {
                                     log::error!("World mesh sync after mouse block break failed: {error}");
                                 }
                                 window.request_redraw();
+                            }
+                            if world_save_enabled {
+                                save_world_if_available(&engine, world_save_path.as_deref());
                             }
                         }
                     }
@@ -340,6 +394,9 @@ pub fn android_main(app: AndroidApp) {
                                                     log::error!("World mesh sync after touch block interaction failed: {error}");
                                                 }
                                                 window.request_redraw();
+                                            }
+                                            if world_save_enabled {
+                                                save_world_if_available(&engine, world_save_path.as_deref());
                                             }
                                         }
                                     }
@@ -415,6 +472,9 @@ pub fn android_main(app: AndroidApp) {
             }
         }
         Event::LoopExiting => {
+            if world_save_enabled {
+                save_world_if_available(&engine, world_save_path.as_deref());
+            }
             log::info!("Winit Android event loop is exiting");
             book_renderer_opengl::record_android_diagnostic("Winit: event loop is exiting");
         }
