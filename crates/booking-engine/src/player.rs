@@ -326,7 +326,10 @@ mod tests {
         let restored = PlayerController::load_from_path(&engine, &path).expect("load player");
 
         assert_eq!(restored.position(), player.position());
-        assert!((restored.yaw() - player.yaw()).abs() < 0.0001);
+        let yaw_delta = (restored.yaw() - player.yaw() + std::f32::consts::PI)
+            .rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        assert!(yaw_delta.abs() < 0.0001);
         assert!((restored.pitch() - player.pitch()).abs() < 0.0001);
         let _ = fs::remove_file(path);
     }
