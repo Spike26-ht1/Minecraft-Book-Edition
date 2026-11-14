@@ -36,7 +36,7 @@ target_sdk_version = 35
 [package.metadata.android.application]
 label = "Minecraft Book Edition Pre-Alpha 1.2.0"
 icon = "@mipmap/ic_launcher"
-theme = "@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+theme = "@style/BookingSplashTheme"
 debuggable = true
 
 [package.metadata.android.application.activity]
