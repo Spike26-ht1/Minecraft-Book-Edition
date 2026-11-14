@@ -143,14 +143,32 @@ impl BookingEngine {
     /// Builds CPU meshes for every loaded vertical section.
     /// Neighbor sections are included so internal section faces are culled.
     pub fn build_loaded_world_meshes(&self) -> Vec<WorldSectionMesh> {
+        let positions: std::collections::BTreeSet<(i32, i32)> = self.world
+            .iter()
+            .map(|(position, _)| (position.x, position.z))
+            .collect();
+        self.build_world_meshes_for_chunks(&positions)
+    }
+
+    /// Builds meshes only for the requested loaded chunk columns. This lets the
+    /// mobile renderer upload newly streamed or edited chunks without remeshing
+    /// the entire world on the main thread.
+    pub fn build_world_meshes_for_chunks(
+        &self,
+        positions: &std::collections::BTreeSet<(i32, i32)>,
+    ) -> Vec<WorldSectionMesh> {
         let mut meshes = Vec::new();
-        for (position, column) in self.world.iter() {
+        for &(chunk_x, chunk_z) in positions {
+            let position = ChunkPos { x: chunk_x, z: chunk_z };
+            let Some(column) = self.world.column(position) else {
+                continue;
+            };
             for (section_y, _) in column.iter_sections() {
                 if let Some(mesh) = mesh_chunk_section(
-                    &self.world, *position, section_y, &self.blocks, 16, 16,
+                    &self.world, position, section_y, &self.blocks, 16, 16,
                 ) {
                     meshes.push(WorldSectionMesh {
-                        position: *position,
+                        position,
                         section_y,
                         mesh,
                     });
@@ -186,6 +204,20 @@ mod tests {
         assert!(meshes.iter().any(|section| !section.mesh.is_empty()));
         assert!(meshes.iter().any(|section| section.section_y < 0));
         assert!(meshes.iter().any(|section| section.section_y > 0));
+    }
+
+    #[test]
+    fn selective_mesh_builder_only_builds_requested_chunk_columns() {
+        let mut engine = BookingEngine::new();
+        engine.generate_prototype_terrain(2);
+        let requested = std::collections::BTreeSet::from([(0, 0), (1, 0)]);
+        let meshes = engine.build_world_meshes_for_chunks(&requested);
+        assert!(meshes.iter().all(|mesh| {
+            (mesh.position.x, mesh.position.z) == (0, 0)
+                || (mesh.position.x, mesh.position.z) == (1, 0)
+        }));
+        assert!(meshes.iter().any(|mesh| mesh.position == ChunkPos { x: 0, z: 0 }));
+        assert!(meshes.iter().any(|mesh| mesh.position == ChunkPos { x: 1, z: 0 }));
     }
 
     #[test]
