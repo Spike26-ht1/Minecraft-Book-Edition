@@ -307,7 +307,15 @@ fn initialize_storage(app: &AndroidApp) -> Option<PathBuf> {
 #[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
     initialize_android_logging();
-    enable_android_immersive_fullscreen(&app);
+    // Set the native window flags immediately, but defer Java UI-thread JNI work
+    // until Winit confirms that Android has created the native window.
+    app.set_window_flags(
+        WindowManagerFlags::FULLSCREEN | WindowManagerFlags::KEEP_SCREEN_ON,
+        WindowManagerFlags::empty(),
+    );
+    book_renderer_opengl::record_android_diagnostic(
+        "Android: fullscreen and keep-screen-on window flags applied; immersive UI deferred",
+    );
     let fullscreen_app = app.clone();
     let storage_root = match initialize_storage(&app) {
         Some(root) => {
@@ -455,6 +463,7 @@ pub fn android_main(app: AndroidApp) {
     let mut first_new_events = true;
     let mut first_about_to_wait = true;
     let mut waiting_for_android_resume_logged = false;
+    let mut last_android_lifecycle_probe = Instant::now();
     let result = event_loop.run(move |event, active_loop| {
         if first_winit_event {
             first_winit_event = false;
@@ -484,19 +493,68 @@ pub fn android_main(app: AndroidApp) {
                 first_about_to_wait = false;
                 book_renderer_opengl::record_android_diagnostic("Winit: AboutToWait dispatched");
             }
-            // Keep a low-frequency wake-up while Android has not delivered
-            // Resumed yet. This avoids sleeping indefinitely on the initial
-            // native-activity lifecycle transition, without busy-spinning.
+            // Keep probing Android's native window while Winit waits for its
+            // initial Resumed event. Some device/ROM combinations can expose
+            // the NativeWindow before the lifecycle event is forwarded.
             if renderer_state.is_none() && renderer_retry_at.is_none() {
+                let now = Instant::now();
+                if now.duration_since(last_android_lifecycle_probe) >= Duration::from_secs(1) {
+                    last_android_lifecycle_probe = now;
+                    let native_window_available = fullscreen_app.native_window().is_some();
+                    book_renderer_opengl::record_android_diagnostic(&format!(
+                        "Android lifecycle probe: native_window_available={native_window_available}",
+                    ));
+
+                    // Recovery is safe only after android-activity reports a live
+                    // NativeWindow. Never create EGL against a missing/destroyed surface.
+                    if native_window_available {
+                        book_renderer_opengl::record_android_diagnostic(
+                            "Android lifecycle recovery: NativeWindow is valid; initializing renderer",
+                        );
+                        enable_android_immersive_fullscreen(&fullscreen_app);
+                        match OpenGlRenderer::new_with_atlas(
+                            active_loop,
+                            "Minecraft Book Edition — Pre-Alpha 1.2.0",
+                            1280,
+                            720,
+                            &engine,
+                            resource_pack_atlas.clone(),
+                        ) {
+                            Ok((window, mut renderer)) => {
+                                log::info!("OpenGL ES renderer initialized through native-window recovery");
+                                book_renderer_opengl::record_android_diagnostic(
+                                    "Renderer: initialized through native-window recovery",
+                                );
+                                renderer.set_loading_progress(0, engine.loaded_chunk_count().max(81));
+                                renderer_loading = true;
+                                renderer_state = Some((window, renderer));
+                                renderer_retry_at = None;
+                                renderer_retry_attempts = 0;
+                            }
+                            Err(error) => {
+                                renderer_retry_attempts = renderer_retry_attempts.saturating_add(1);
+                                let backoff_seconds = (1_u64 << renderer_retry_attempts.min(4)).min(16);
+                                renderer_retry_at = Some(Instant::now() + Duration::from_secs(backoff_seconds));
+                                log::error!("Native-window renderer recovery failed: {error}");
+                                book_renderer_opengl::record_android_diagnostic(&format!(
+                                    "Renderer ERROR: native-window recovery failed; retry in {backoff_seconds}s: {error}",
+                                ));
+                            }
+                        }
+                    }
+                }
+
                 if !waiting_for_android_resume_logged {
                     waiting_for_android_resume_logged = true;
                     book_renderer_opengl::record_android_diagnostic(
-                        "Android lifecycle: waiting for Resumed; using 500ms event-loop wakeups",
+                        "Android lifecycle: waiting for Resumed; polling native-window availability every second",
                     );
                 }
-                active_loop.set_control_flow(ControlFlow::WaitUntil(
-                    Instant::now() + Duration::from_millis(500),
-                ));
+                if renderer_retry_at.is_none() {
+                    active_loop.set_control_flow(ControlFlow::WaitUntil(
+                        Instant::now() + Duration::from_millis(500),
+                    ));
+                }
             }
         }
         Event::Resumed => {
