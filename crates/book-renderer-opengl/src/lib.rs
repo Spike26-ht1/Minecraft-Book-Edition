@@ -113,7 +113,10 @@ void main() {
     float diffuse = max(dot(normalize(v_normal), sun_direction), 0.0);
     float lighting = 0.42 + diffuse * 0.58;
     vec4 texel = texture(u_atlas, v_uv);
-    out_color = vec4(texel.rgb * v_color * lighting, texel.a);
+    // Keep geometry readable even when a resource atlas is missing, incomplete,
+    // or has an unexpected tile orientation. The block tint is the safe fallback.
+    vec3 base_color = max(texel.rgb, v_color * 0.72);
+    out_color = vec4(base_color * lighting, 1.0);
 }
 "#;
 
@@ -178,7 +181,10 @@ void main() {
     float diffuse = max(dot(normalize(v_normal), sun_direction), 0.0);
     float lighting = 0.42 + diffuse * 0.58;
     vec4 texel = texture(u_atlas, v_uv);
-    out_color = vec4(texel.rgb * v_color * lighting, texel.a);
+    // Keep geometry readable even when a resource atlas is missing, incomplete,
+    // or has an unexpected tile orientation. The block tint is the safe fallback.
+    vec3 base_color = max(texel.rgb, v_color * 0.72);
+    out_color = vec4(base_color * lighting, 1.0);
 }
 "#;
 
@@ -364,11 +370,14 @@ impl OpenGlRenderer {
     #[cfg(target_os = "android")]
     fn draw_debug_button(&self, target: &mut glium::Frame) -> Result<(), RendererError> {
         let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
-        let x = screen_width.saturating_sub(88) as f32;
+        // Keep the control clear of Android's status bar and gesture-navigation
+        // area. The bottom-right inset is intentionally conservative on phones.
+        let x = screen_width.saturating_sub(96) as f32;
+        let y = screen_height.saturating_sub(88) as f32;
         let mut vertices = Vec::new();
-        push_rect(&mut vertices, x, 12.0, 76.0, 40.0, [0.015, 0.02, 0.025, 0.82]);
+        push_rect(&mut vertices, x, y, 76.0, 40.0, [0.015, 0.02, 0.025, 0.88]);
         for (index, character) in "DBG".chars().enumerate() {
-            draw_character(&mut vertices, character, x + 12.0 + index as f32 * 16.0, 23.0, 2.0);
+            draw_character(&mut vertices, character, x + 12.0 + index as f32 * 16.0, y + 11.0, 2.0);
         }
         let buffer = VertexBuffer::new(&self.display, &vertices)
             .map_err(|error| RendererError::new(format!("Debug button buffer: {error}")))?;
