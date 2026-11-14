@@ -372,7 +372,7 @@ pub fn android_main(app: AndroidApp) {
         (spawn_position[2].floor() as i32).div_euclid(16),
     );
     let mut stream_pending = true;
-    let mut initial_world_loading = true;
+    let mut renderer_loading = true;
     let result = event_loop.run(move |event, active_loop| match event {
         Event::Resumed => {
             enable_android_immersive_fullscreen(&fullscreen_app);
@@ -395,7 +395,8 @@ pub fn android_main(app: AndroidApp) {
                         book_renderer_opengl::record_android_diagnostic(
                             "Renderer: OpenGL ES renderer initialized successfully",
                         );
-                        renderer.set_loading_progress(engine.loaded_chunk_count(), 81);
+                        renderer.set_loading_progress(0, engine.loaded_chunk_count().max(81));
+                        renderer_loading = true;
                         renderer_state = Some((window, renderer));
                         renderer_retry_at = None;
                         renderer_retry_attempts = 0;
@@ -753,21 +754,22 @@ pub fn android_main(app: AndroidApp) {
                     - pressed_keys.contains(&KeyCode::KeyS) as i8) as f32;
                 let keyboard_strafe = (pressed_keys.contains(&KeyCode::KeyD) as i8
                     - pressed_keys.contains(&KeyCode::KeyA) as i8) as f32;
-                let forward = (keyboard_forward + frame.mobile_controls.forward).clamp(-1.0, 1.0);
-                let strafe = (keyboard_strafe + frame.mobile_controls.strafe).clamp(-1.0, 1.0);
-                let jump = pressed_keys.contains(&KeyCode::Space) || jump_queued;
-                jump_queued = false;
-                player.update(
-                    &engine,
+                let input = if renderer_loading {
+                    // Keep the spawn pose stable while the first 9x9 area is built.
+                    PlayerInput::default()
+                } else {
+                    let forward = (keyboard_forward + frame.mobile_controls.forward).clamp(-1.0, 1.0);
+                    let strafe = (keyboard_strafe + frame.mobile_controls.strafe).clamp(-1.0, 1.0);
                     PlayerInput {
                         forward,
                         strafe,
-                        jump,
+                        jump: pressed_keys.contains(&KeyCode::Space) || jump_queued,
                         sprint: pressed_keys.contains(&KeyCode::ShiftLeft)
                             || frame.mobile_controls.sprint_pressed,
-                    },
-                    delta_seconds,
-                );
+                    }
+                };
+                jump_queued = false;
+                player.update(&engine, input, delta_seconds);
 
                 let player_position = player.position();
                 let current_stream_chunk = (
@@ -782,32 +784,40 @@ pub fn android_main(app: AndroidApp) {
                 // Generate and upload at most one missing chunk column per frame.
                 // This spreads terrain creation and GPU buffer uploads across
                 // multiple frames instead of blocking the render loop on a chunk ring.
+                let mut world_chunk_generated = false;
                 if stream_pending {
                     if let Some(position) = engine.ensure_next_prototype_chunk_around(
                         player_position[0].floor() as i32,
                         player_position[2].floor() as i32,
                         4,
                     ) {
+                        world_chunk_generated = true;
                         log::debug!("Booking streamed chunk {}, {}", position.x, position.z);
-                        if let Some((window, renderer)) = renderer_state.as_mut() {
-                            if let Err(error) = renderer.sync_world(&engine) {
-                                log::error!("Renderer sync after chunk streaming failed: {error}");
-                            }
-                            if initial_world_loading {
-                                renderer.set_loading_progress(engine.loaded_chunk_count(), 81);
-                            }
-                            window.request_redraw();
-                        }
                     } else {
                         stream_pending = false;
-                        if initial_world_loading {
-                            initial_world_loading = false;
-                            if let Some((_, renderer)) = renderer_state.as_mut() {
-                                renderer.finish_loading();
+                    }
+                }
+
+                if let Some((window, renderer)) = renderer_state.as_mut() {
+                    match renderer.sync_next_chunk(&engine) {
+                        Ok(uploaded) => {
+                            if uploaded || world_chunk_generated {
+                                window.request_redraw();
                             }
-                            log::info!("Booking initial world loading completed");
+                        }
+                        Err(error) => log::error!("Incremental GPU chunk upload failed: {error}"),
+                    }
+
+                    if renderer_loading {
+                        let loaded = renderer.loaded_gpu_chunk_count();
+                        let total = engine.loaded_chunk_count().max(81);
+                        renderer.set_loading_progress(loaded, total);
+                        if !stream_pending && loaded >= engine.loaded_chunk_count() {
+                            renderer.finish_loading();
+                            renderer_loading = false;
+                            log::info!("Booking world and initial chunk meshes are ready");
                             book_renderer_opengl::record_android_diagnostic(
-                                "World loading: initial 9x9 chunk area is ready",
+                                "World loading: initial terrain and GPU chunk meshes are ready",
                             );
                         }
                     }
@@ -853,9 +863,11 @@ pub fn android_main(app: AndroidApp) {
                             720,
                             &engine,
                         ) {
-                            Ok((window, renderer)) => {
+                            Ok((window, mut renderer)) => {
                                 log::info!("OpenGL ES renderer recovered after retry");
                                 book_renderer_opengl::record_android_diagnostic("Renderer: automatic retry succeeded");
+                                renderer.set_loading_progress(0, engine.loaded_chunk_count().max(81));
+                                renderer_loading = true;
                                 renderer_state = Some((window, renderer));
                                 renderer_retry_at = None;
                                 renderer_retry_attempts = 0;
