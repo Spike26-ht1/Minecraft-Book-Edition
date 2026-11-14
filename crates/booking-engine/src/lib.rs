@@ -67,6 +67,41 @@ impl BookingEngine {
         }
     }
 
+    /// Generates at most one missing chunk column per call, preferring the
+    /// closest missing column to the player. The client can call this once per
+    /// frame to spread generation and GPU uploads across frames instead of
+    /// causing a large pause when crossing a chunk boundary.
+    pub fn ensure_next_prototype_chunk_around(
+        &mut self,
+        world_x: i32,
+        world_z: i32,
+        chunk_radius: i32,
+    ) -> Option<ChunkPos> {
+        let (center, _, _) = ChunkManager::locate(world_x, world_z);
+        let radius = chunk_radius.clamp(0, 8);
+        let mut candidates = Vec::with_capacity(((radius * 2 + 1) as usize).pow(2));
+
+        for offset_z in -radius..=radius {
+            for offset_x in -radius..=radius {
+                let Some(chunk_x) = center.x.checked_add(offset_x) else { continue; };
+                let Some(chunk_z) = center.z.checked_add(offset_z) else { continue; };
+                let distance = offset_x.abs() + offset_z.abs();
+                candidates.push((distance, offset_x.abs().max(offset_z.abs()), chunk_x, chunk_z));
+            }
+        }
+        candidates.sort_unstable();
+
+        for (_, _, chunk_x, chunk_z) in candidates {
+            let position = ChunkPos { x: chunk_x, z: chunk_z };
+            if !self.world.is_loaded(position)
+                && self.generate_prototype_chunk(chunk_x, chunk_z)
+            {
+                return Some(position);
+            }
+        }
+        None
+    }
+
     /// Ensures prototype terrain exists around the player's current chunk.
     /// Returns the number of newly generated chunk columns. Chunks are kept
     /// resident for now; disk-backed unloading is a later streaming stage.
@@ -238,6 +273,19 @@ mod tests {
         assert_eq!(engine.loaded_chunk_count(), 9);
         assert_eq!(engine.world().get_block(3, 30, 3), Some(BlockId(4)));
         assert!(engine.world().column(ChunkPos { x: 2, z: 0 }).is_some());
+    }
+
+    #[test]
+    fn incremental_streaming_generates_only_one_chunk_per_call() {
+        let mut engine = BookingEngine::new();
+        engine.generate_prototype_terrain(0);
+        let first = engine.ensure_next_prototype_chunk_around(0, 0, 2);
+        assert!(first.is_some());
+        assert_eq!(engine.loaded_chunk_count(), 2);
+        let second = engine.ensure_next_prototype_chunk_around(0, 0, 2);
+        assert!(second.is_some());
+        assert_eq!(engine.loaded_chunk_count(), 3);
+        assert_ne!(first, second);
     }
 
     #[test]
