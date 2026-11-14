@@ -452,12 +452,53 @@ pub fn android_main(app: AndroidApp) {
     let mut renderer_loading = true;
     book_renderer_opengl::record_android_diagnostic("Winit: entering event_loop.run");
     let mut first_winit_event = true;
+    let mut first_new_events = true;
+    let mut first_about_to_wait = true;
+    let mut waiting_for_android_resume_logged = false;
     let result = event_loop.run(move |event, active_loop| {
         if first_winit_event {
             first_winit_event = false;
-            book_renderer_opengl::record_android_diagnostic("Winit: first event callback received");
+            book_renderer_opengl::record_android_diagnostic(&format!(
+                "Winit: first event callback received ({})",
+                match &event {
+                    Event::NewEvents(_) => "NewEvents",
+                    Event::Resumed => "Resumed",
+                    Event::Suspended => "Suspended",
+                    Event::AboutToWait => "AboutToWait",
+                    Event::LoopExiting => "LoopExiting",
+                    Event::WindowEvent { .. } => "WindowEvent",
+                    Event::DeviceEvent { .. } => "DeviceEvent",
+                    _ => "Other",
+                }
+            ));
         }
         match event {
+        Event::NewEvents(_) => {
+            if first_new_events {
+                first_new_events = false;
+                book_renderer_opengl::record_android_diagnostic("Winit: NewEvents dispatched");
+            }
+        }
+        Event::AboutToWait => {
+            if first_about_to_wait {
+                first_about_to_wait = false;
+                book_renderer_opengl::record_android_diagnostic("Winit: AboutToWait dispatched");
+            }
+            // Keep a low-frequency wake-up while Android has not delivered
+            // Resumed yet. This avoids sleeping indefinitely on the initial
+            // native-activity lifecycle transition, without busy-spinning.
+            if renderer_state.is_none() && renderer_retry_at.is_none() {
+                if !waiting_for_android_resume_logged {
+                    waiting_for_android_resume_logged = true;
+                    book_renderer_opengl::record_android_diagnostic(
+                        "Android lifecycle: waiting for Resumed; using 500ms event-loop wakeups",
+                    );
+                }
+                active_loop.set_control_flow(ControlFlow::WaitUntil(
+                    Instant::now() + Duration::from_millis(500),
+                ));
+            }
+        }
         Event::Resumed => {
             enable_android_immersive_fullscreen(&fullscreen_app);
             log::info!("Android lifecycle: Resumed");
