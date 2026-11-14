@@ -223,16 +223,16 @@ const FACES: [Face; 6] = [
         neighbor: [0, -1, 0],
         normal: [0.0, -1.0, 0.0],
         positions: [
-            [0.0, 0.0, 0.0], [1.0, 0.0, 1.0], [1.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 1.0],
+            [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 0.0, 1.0],
+            [0.0, 0.0, 0.0], [1.0, 0.0, 1.0], [0.0, 0.0, 1.0],
         ],
     },
     Face {
         neighbor: [0, 1, 0],
         normal: [0.0, 1.0, 0.0],
         positions: [
-            [0.0, 1.0, 0.0], [1.0, 1.0, 0.0], [1.0, 1.0, 1.0],
-            [0.0, 1.0, 0.0], [1.0, 1.0, 1.0], [0.0, 1.0, 1.0],
+            [0.0, 1.0, 0.0], [1.0, 1.0, 1.0], [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0], [0.0, 1.0, 1.0], [1.0, 1.0, 1.0],
         ],
     },
 ];
@@ -252,6 +252,31 @@ mod tests {
             opaque: true,
         });
         registry
+    }
+
+    #[test]
+    fn all_face_windings_match_their_outward_normals() {
+        for face in FACES.iter() {
+            let edge_a = [
+                face.positions[1][0] - face.positions[0][0],
+                face.positions[1][1] - face.positions[0][1],
+                face.positions[1][2] - face.positions[0][2],
+            ];
+            let edge_b = [
+                face.positions[2][0] - face.positions[0][0],
+                face.positions[2][1] - face.positions[0][1],
+                face.positions[2][2] - face.positions[0][2],
+            ];
+            let cross = [
+                edge_a[1] * edge_b[2] - edge_a[2] * edge_b[1],
+                edge_a[2] * edge_b[0] - edge_a[0] * edge_b[2],
+                edge_a[0] * edge_b[1] - edge_a[1] * edge_b[0],
+            ];
+            let dot = cross[0] * face.normal[0]
+                + cross[1] * face.normal[1]
+                + cross[2] * face.normal[2];
+            assert!(dot > 0.0, "face winding disagrees with normal {:?}", face.normal);
+        }
     }
 
     #[test]
