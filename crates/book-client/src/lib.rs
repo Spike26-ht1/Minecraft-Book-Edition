@@ -330,6 +330,23 @@ pub fn android_main(app: AndroidApp) {
         }
     }
 
+    // Load an extracted Bedrock resource pack while the native Android splash is visible.
+    let resource_pack_atlas = storage_root.as_ref().and_then(|root| {
+        let pack_root = root.join("game/resource_packs");
+        match book_assets::load_bedrock_terrain_atlas(&pack_root) {
+            Ok(atlas) => {
+                log::info!("Loaded Bedrock terrain textures from {}", pack_root.display());
+                book_renderer_opengl::record_android_diagnostic("Resource packs: loaded grass, dirt and stone PNG textures");
+                Some(atlas)
+            }
+            Err(error) => {
+                log::warn!("No usable extracted Bedrock resource pack at {}: {error}", pack_root.display());
+                book_renderer_opengl::record_android_diagnostic(&format!("Resource packs: using prototype atlas ({error})"));
+                None
+            }
+        }
+    });
+
     let mut player = match player_save_path.as_ref() {
         Some(path) if path.exists() => match PlayerController::load_from_path(&engine, path) {
             Ok(player) => {
@@ -383,12 +400,13 @@ pub fn android_main(app: AndroidApp) {
                 book_renderer_opengl::record_android_diagnostic(
                     "Renderer: starting OpenGL ES 3 initialization",
                 );
-                match OpenGlRenderer::new(
+                match OpenGlRenderer::new_with_atlas(
                     active_loop,
                     "Minecraft Book Edition — Pre-Alpha 1.2.0",
                     1280,
                     720,
                     &engine,
+                    resource_pack_atlas.clone(),
                 ) {
                     Ok((window, mut renderer)) => {
                         log::info!("OpenGL ES renderer initialized successfully");
@@ -856,12 +874,13 @@ pub fn android_main(app: AndroidApp) {
                 if let Some(retry_at) = renderer_retry_at {
                     if Instant::now() >= retry_at {
                         book_renderer_opengl::record_android_diagnostic("Renderer: retrying Android EGL/OpenGL initialization");
-                        match OpenGlRenderer::new(
+                        match OpenGlRenderer::new_with_atlas(
                             active_loop,
                             "Minecraft Book Edition — Pre-Alpha 1.2.0",
                             1280,
                             720,
                             &engine,
+                            resource_pack_atlas.clone(),
                         ) {
                             Ok((window, mut renderer)) => {
                                 log::info!("OpenGL ES renderer recovered after retry");
