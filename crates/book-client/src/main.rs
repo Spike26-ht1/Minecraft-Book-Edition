@@ -1,5 +1,7 @@
 #[cfg(not(target_os = "android"))]
-use book_renderer_api::{ClearColor, RendererBackend, RenderFrame};
+use booking_engine::BookingEngine;
+#[cfg(not(target_os = "android"))]
+use book_renderer_api::{RendererBackend, RenderFrame};
 #[cfg(not(target_os = "android"))]
 use book_renderer_opengl::OpenGlRenderer;
 #[cfg(not(target_os = "android"))]
@@ -9,22 +11,31 @@ use glium::winit::keyboard::{KeyCode, PhysicalKey};
 
 #[cfg(not(target_os = "android"))]
 fn main() {
-    let event_loop = glium::winit::event_loop::EventLoopBuilder::new()
+    let event_loop = glium::winit::event_loop::EventLoop::builder()
         .build()
         .expect("failed to create window event loop");
-    let (window, mut renderer) =
-        OpenGlRenderer::new(&event_loop, "Minecraft Book Edition 26.60", 1280, 720)
-            .unwrap_or_else(|error| {
-                eprintln!("Failed to initialize Book Edition renderer: {error}");
-                std::process::exit(1);
-            });
+
+    let mut engine = BookingEngine::new();
+    engine.generate_prototype_terrain(4);
+
+    let (window, mut renderer) = OpenGlRenderer::new(
+        &event_loop,
+        "Minecraft Book Edition — Booking",
+        1280,
+        720,
+        &engine,
+    )
+    .unwrap_or_else(|error| {
+        eprintln!("Failed to initialize Book Edition renderer: {error}");
+        std::process::exit(1);
+    });
 
     let info = renderer.info();
     println!("{} — {:?} ({})", info.name, info.api, info.api_version);
     println!("Target: desktop 64-bit");
     println!("Press F3 to toggle the debug overlay.");
 
-    let frame = RenderFrame { clear_color: ClearColor::SKY };
+    let frame = RenderFrame::default();
     let _ = event_loop.run(move |event, window_target| match event {
         Event::WindowEvent { event, .. } => match event {
             WindowEvent::CloseRequested => window_target.exit(),
