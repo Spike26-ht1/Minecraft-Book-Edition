@@ -23,8 +23,10 @@ and block registry logic must not be duplicated inside graphics backends.
 
 The current prototype generator creates deterministic multi-section terrain
 for individual chunk columns. As the player enters a new chunk, Booking ensures
-that a radius of nearby prototype chunks is loaded. Distant chunks are still
-kept in memory; disk-backed unloading and bounded residency remain planned.
+that a radius of nearby prototype chunks is loaded. Only one new column is
+generated and uploaded per frame while the player is inside a new area, avoiding
+a single large chunk-ring rebuild on the main render loop. Distant chunks are
+still kept in memory; disk-backed unloading and bounded residency remain planned.
 
 World persistence uses a versioned Booking binary container. Each vertical
 section stores its palette, packed indices, and validated dimensions. The file
@@ -42,7 +44,10 @@ and the renderer. A left virtual joystick supplies normalized strafe/forward
 axes. Four independent right-side buttons provide jump, held sprint, mine, and
 place actions. Touch identifiers are routed independently so the movement
 stick can remain held while another finger looks around or presses an action.
-The visible HUD currently uses generated stone-like pixel panels; it does not
+The CFG test menu switches between 30, 60, 90, and uncapped frame pacing, and
+sets render distance to 2, 4, 6, 8, or 12 chunks. Uncapped mode uses Winit's
+poll loop and can raise power use and temperature. The visible HUD currently
+uses generated stone-like pixel panels; it does not
 ship Mojang's original UI sprites. Those will be loaded from the local vanilla
 resource-pack installation only after the consent-based asset downloader and
 texture loader are implemented.
@@ -65,11 +70,12 @@ or binaries are reused.
 3. Generate or update palette-backed chunk sections.
 4. Build CPU meshes using all six loaded neighbors.
 5. Cull chunks outside the camera frustum and configured render distance.
-6. Upload changed meshes to per-chunk GPU buffers.
-7. Sample the block texture atlas with pixel-preserving filtering.
-8. Render opaque terrain, cutout geometry, translucent geometry, sky, and
+6. Rebuild only newly loaded or edited chunk columns and their affected neighbors.
+7. Upload changed meshes to persistent per-chunk GPU buffers.
+8. Sample the block texture atlas with pixel-preserving filtering.
+9. Render opaque terrain, cutout geometry, translucent geometry, sky, and
    environment passes in a defined order.
-9. Apply mobile-appropriate post-processing and present the frame.
+10. Apply mobile-appropriate post-processing and present the frame.
 
 ## Mod extension points
 
@@ -84,7 +90,7 @@ A requested capability is not automatically granted.
 
 ## Compatibility boundary
 
-The current terrain generator and built-in texture atlas are prototypes. Camera state, player gravity/collision, keyboard movement, touch-look, and basic block interaction are now connected to the renderer. The world format, biome and
+The current terrain generator and built-in texture atlas are prototypes. Camera state, player gravity/collision, keyboard movement, touch-look, mobile test settings, incremental chunk uploads, and basic block interaction are now connected to the renderer. Top and bottom voxel face winding is checked against outward normals by a mesher test. The world format, biome and
 noise algorithms, block states, lighting model, resource-pack rendering,
 entity pipeline, and Bedrock network protocol are not yet Bedrock-compatible.
 Those systems must be implemented and tested independently before claiming
