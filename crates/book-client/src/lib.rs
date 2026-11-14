@@ -499,12 +499,11 @@ pub fn android_main(app: AndroidApp) {
                                     }
                                 }
                                 ActiveTouch::Look => {
-                                    if let Some(previous) = touch_start_positions.get_mut(&touch_id) {
+                                    if let Some(previous) = active_touches.get(&touch_id).copied() {
                                         player.look(
                                             ((location.0 - previous.0) as f32) * 0.004,
                                             -((location.1 - previous.1) as f32) * 0.004,
                                         );
-                                        *previous = location;
                                         frame.camera.position = player.camera_position();
                                         frame.camera.yaw = player.yaw();
                                         frame.camera.pitch = player.pitch();
@@ -517,10 +516,13 @@ pub fn android_main(app: AndroidApp) {
                             }
                         }
                         TouchPhase::Ended | TouchPhase::Cancelled => {
+                            let start = touch_start_positions.remove(&touch_id);
+                            let started = touch_start_times.remove(&touch_id);
                             active_touches.remove(&touch_id);
-                            touch_start_positions.remove(&touch_id);
-                            touch_start_times.remove(&touch_id);
                             let role = touch_roles.remove(&touch_id).unwrap_or(ActiveTouch::Look);
+                            let held_for = started
+                                .map(|started| started.elapsed())
+                                .unwrap_or_default();
                             match role {
                                 ActiveTouch::Joystick => {
                                     frame.mobile_controls.strafe = 0.0;
@@ -539,11 +541,6 @@ pub fn android_main(app: AndroidApp) {
                             // Keep the original world-surface gesture as a fallback:
                             // short taps mine, while a long press places a block.
                             if touch.phase == TouchPhase::Ended && role == ActiveTouch::Look {
-                                let started = touch_start_times.get(&touch_id).copied();
-                                let held_for = started
-                                    .map(|started| started.elapsed())
-                                    .unwrap_or_default();
-                                let start = touch_start_positions.get(&touch_id).copied();
                                 if let Some(start) = start {
                                     let dx = location.0 - start.0;
                                     let dy = location.1 - start.1;
