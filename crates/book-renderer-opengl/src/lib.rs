@@ -113,9 +113,9 @@ void main() {
     float diffuse = max(dot(normalize(v_normal), sun_direction), 0.0);
     float lighting = 0.42 + diffuse * 0.58;
     vec4 texel = texture(u_atlas, v_uv);
-    // Keep geometry readable even when a resource atlas is missing, incomplete,
-    // or has an unexpected tile orientation. The block tint is the safe fallback.
-    vec3 base_color = max(texel.rgb, v_color * 0.72);
+    // Use the imported resource-pack texel as-is. Transparent/unfilled atlas
+    // cells fall back to the built-in block tint so missing assets remain visible.
+    vec3 base_color = mix(v_color, texel.rgb, step(0.01, texel.a));
     out_color = vec4(base_color * lighting, 1.0);
 }
 "#;
@@ -181,9 +181,9 @@ void main() {
     float diffuse = max(dot(normalize(v_normal), sun_direction), 0.0);
     float lighting = 0.42 + diffuse * 0.58;
     vec4 texel = texture(u_atlas, v_uv);
-    // Keep geometry readable even when a resource atlas is missing, incomplete,
-    // or has an unexpected tile orientation. The block tint is the safe fallback.
-    vec3 base_color = max(texel.rgb, v_color * 0.72);
+    // Use the imported resource-pack texel as-is. Transparent/unfilled atlas
+    // cells fall back to the built-in block tint so missing assets remain visible.
+    vec3 base_color = mix(v_color, texel.rgb, step(0.01, texel.a));
     out_color = vec4(base_color * lighting, 1.0);
 }
 "#;
