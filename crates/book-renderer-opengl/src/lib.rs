@@ -254,7 +254,7 @@ impl OpenGlRenderer {
             .with_title(title)
             .with_inner_size(width, height)
             .build(event_loop);
-        Self::from_display(window, display, engine)
+        Self::from_display(window, display, engine, None)
     }
 
     #[cfg(target_os = "android")]
@@ -265,14 +265,27 @@ impl OpenGlRenderer {
         _height: u32,
         engine: &BookingEngine,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
+        Self::new_with_atlas(event_loop, title, _width, _height, engine, None)
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn new_with_atlas(
+        event_loop: &glium::winit::event_loop::ActiveEventLoop,
+        title: &str,
+        _width: u32,
+        _height: u32,
+        engine: &BookingEngine,
+        atlas_data: Option<TextureAtlas>,
+    ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         let (window, display) = create_android_display(event_loop, title)?;
-        Self::from_display(window, display, engine)
+        Self::from_display(window, display, engine, atlas_data)
     }
 
     fn from_display(
         window: glium::winit::window::Window,
         display: glium::backend::glutin::Display<WindowSurface>,
         _engine: &BookingEngine,
+        atlas_data: Option<TextureAtlas>,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
         // Do not upload a saved world synchronously during renderer creation.
         // The client uploads one chunk column per frame while the loading overlay is visible.
@@ -281,7 +294,7 @@ impl OpenGlRenderer {
         let chunk_meshes = Vec::new();
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: uploading prototype texture atlas");
-        let atlas_data = prototype_texture_atlas();
+        let atlas_data = atlas_data.unwrap_or_else(prototype_texture_atlas);
         let raw_atlas = RawImage2d::from_raw_rgba_reversed(
             &atlas_data.rgba,
             (atlas_data.width, atlas_data.height),
