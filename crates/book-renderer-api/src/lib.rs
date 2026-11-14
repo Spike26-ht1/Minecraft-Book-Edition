@@ -215,3 +215,50 @@ mod camera_tests {
     }
 }
 
+
+
+#[cfg(test)]
+mod mobile_controls_tests {
+    use super::*;
+
+    #[test]
+    fn mobile_controls_fit_common_phone_viewports() {
+        for (width, height) in [(360, 800), (393, 873), (720, 1600), (1536, 864)] {
+            let layout = MobileControlsLayout::new(width, height);
+            let bounds = [
+                layout.jump, layout.sprint, layout.break_block,
+                layout.place_block, layout.debug,
+            ];
+            for rect in bounds {
+                assert!(rect.x >= 0.0 && rect.y >= 0.0);
+                assert!(rect.x + rect.width <= width as f32);
+                assert!(rect.y + rect.height <= height as f32);
+            }
+            assert!(layout.joystick_center[0] - layout.joystick_radius >= 0.0);
+            assert!(layout.joystick_center[1] + layout.joystick_radius <= height as f32);
+        }
+    }
+
+    #[test]
+    fn mobile_action_buttons_do_not_overlap_each_other() {
+        let layout = MobileControlsLayout::new(393, 873);
+        let buttons = [layout.jump, layout.sprint, layout.break_block, layout.place_block];
+        for left in 0..buttons.len() {
+            for right in (left + 1)..buttons.len() {
+                let a = buttons[left];
+                let b = buttons[right];
+                let overlap_x = a.x < b.x + b.width && a.x + a.width > b.x;
+                let overlap_y = a.y < b.y + b.height && a.y + a.height > b.y;
+                assert!(!(overlap_x && overlap_y));
+            }
+        }
+    }
+
+    #[test]
+    fn touch_rect_uses_inclusive_edges() {
+        let rect = TouchRect { x: 10.0, y: 20.0, width: 30.0, height: 40.0 };
+        assert!(rect.contains([10.0, 20.0]));
+        assert!(rect.contains([40.0, 60.0]));
+        assert!(!rect.contains([41.0, 60.0]));
+    }
+}
