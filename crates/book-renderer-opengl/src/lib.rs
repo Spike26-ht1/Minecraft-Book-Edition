@@ -272,11 +272,13 @@ impl OpenGlRenderer {
     fn from_display(
         window: glium::winit::window::Window,
         display: glium::backend::glutin::Display<WindowSurface>,
-        engine: &BookingEngine,
+        _engine: &BookingEngine,
     ) -> Result<(glium::winit::window::Window, Self), RendererError> {
+        // Do not upload a saved world synchronously during renderer creation.
+        // The client uploads one chunk column per frame while the loading overlay is visible.
         #[cfg(target_os = "android")]
-        record_android_diagnostic("Renderer: building chunk-manager world mesh");
-        let chunk_meshes = upload_chunk_meshes(&display, engine)?;
+        record_android_diagnostic("Renderer: deferring chunk GPU uploads until after the first loading frame");
+        let chunk_meshes = Vec::new();
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: uploading prototype texture atlas");
         let atlas_data = prototype_texture_atlas();
@@ -349,10 +351,42 @@ impl OpenGlRenderer {
         }))
     }
 
-    /// Uploads only newly loaded chunk columns and their loaded neighbors.
-    /// Existing GPU meshes are retained, avoiding full-world rebuilds whenever
-    /// the player crosses a chunk boundary.
-    pub fn sync_world(&mut self, engine: &BookingEngine) -> Result<(), RendererError> {
+    /// Uploads at most one missing chunk column and refreshes already-uploaded
+    /// neighbors whose border faces may have changed. Returns true when work was done.
+    pub fn sync_next_chunk(&mut self, engine: &BookingEngine) -> Result<bool, RendererError> {
+        let loaded: BTreeSet<(i32, i32)> = engine.world()
+            .iter()
+            .map(|(position, _)| (position.x, position.z))
+            .collect();
+        let existing: BTreeSet<(i32, i32)> = self.chunk_meshes
+            .iter()
+            .map(|mesh| (mesh.chunk_x, mesh.chunk_z))
+            .collect();
+        let Some(&(chunk_x, chunk_z)) = loaded.difference(&existing).next() else {
+            return Ok(false);
+        };
+
+        let mut affected = BTreeSet::from([(chunk_x, chunk_z)]);
+        for neighbor in [
+            (chunk_x - 1, chunk_z),
+            (chunk_x + 1, chunk_z),
+            (chunk_x, chunk_z - 1),
+            (chunk_x, chunk_z + 1),
+        ] {
+            if existing.contains(&neighbor) {
+                affected.insert(neighbor);
+            }
+        }
+        self.rebuild_chunk_buffers(engine, &affected)?;
+        Ok(true)
+    }
+
+    /// Number of chunk columns currently uploaded to GPU memory.
+    pub fn loaded_gpu_chunk_count(&self) -> usize {
+        self.chunk_meshes.len()
+    }
+
+    /// Uploads all missing columns. Intended for explicit bulk synchronization, not startup.
         let loaded: BTreeSet<(i32, i32)> = engine.world()
             .iter()
             .map(|(position, _)| (position.x, position.z))
@@ -656,6 +690,20 @@ fn voxel_camera_matrix(aspect: f32, camera: CameraState) -> [[f32; 4]; 4] {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod loading_overlay_tests {
+    use super::build_loading_overlay_vertices;
+
+    #[test]
+    fn loading_overlay_vertex_count_is_stable_as_progress_changes() {
+        let initial = build_loading_overlay_vertices(1536, 709, 0, 81);
+        let halfway = build_loading_overlay_vertices(1536, 709, 40, 81);
+        let complete = build_loading_overlay_vertices(1536, 709, 81, 81);
+        assert_eq!(initial.len(), halfway.len());
+        assert_eq!(halfway.len(), complete.len());
+    }
 }
 
 #[cfg(test)]
