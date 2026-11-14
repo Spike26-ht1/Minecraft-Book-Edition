@@ -322,7 +322,9 @@ pub fn android_main(app: AndroidApp) {
     }
 
     if !world_loaded {
-        engine.generate_prototype_terrain(4);
+        // Build only the spawn chunk before the window exists. The surrounding
+        // 80 columns are generated incrementally after the loading screen appears.
+        engine.generate_prototype_terrain(0);
         if world_save_enabled {
             save_world_if_available(&engine, world_save_path.as_deref());
         }
@@ -369,7 +371,8 @@ pub fn android_main(app: AndroidApp) {
         (spawn_position[0].floor() as i32).div_euclid(16),
         (spawn_position[2].floor() as i32).div_euclid(16),
     );
-    let mut stream_pending = false;
+    let mut stream_pending = true;
+    let mut initial_world_loading = true;
     let result = event_loop.run(move |event, active_loop| match event {
         Event::Resumed => {
             enable_android_immersive_fullscreen(&fullscreen_app);
@@ -387,11 +390,12 @@ pub fn android_main(app: AndroidApp) {
                     720,
                     &engine,
                 ) {
-                    Ok((window, renderer)) => {
+                    Ok((window, mut renderer)) => {
                         log::info!("OpenGL ES renderer initialized successfully");
                         book_renderer_opengl::record_android_diagnostic(
                             "Renderer: OpenGL ES renderer initialized successfully",
                         );
+                        renderer.set_loading_progress(engine.loaded_chunk_count(), 81);
                         renderer_state = Some((window, renderer));
                         renderer_retry_at = None;
                         renderer_retry_attempts = 0;
@@ -789,10 +793,23 @@ pub fn android_main(app: AndroidApp) {
                             if let Err(error) = renderer.sync_world(&engine) {
                                 log::error!("Renderer sync after chunk streaming failed: {error}");
                             }
+                            if initial_world_loading {
+                                renderer.set_loading_progress(engine.loaded_chunk_count(), 81);
+                            }
                             window.request_redraw();
                         }
                     } else {
                         stream_pending = false;
+                        if initial_world_loading {
+                            initial_world_loading = false;
+                            if let Some((_, renderer)) = renderer_state.as_mut() {
+                                renderer.finish_loading();
+                            }
+                            log::info!("Booking initial world loading completed");
+                            book_renderer_opengl::record_android_diagnostic(
+                                "World loading: initial 9x9 chunk area is ready",
+                            );
+                        }
                     }
                 }
 
