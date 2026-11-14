@@ -21,7 +21,8 @@ The first test-build target is **Android ARM64 (arm64-v8a)**. Desktop targets re
 - Face normals and directional lighting.
 - First-person player controller with gravity, jumping, sprinting, and axis-separated voxel collision.
 - 3D DDA block raycasting, touch-tap/mouse block breaking, and long-press prototype stone placement.
-- Versioned binary world saves that preserve compressed section palettes, validate a checksum, and autosave after edits and Android lifecycle suspension.
+- Versioned binary world saves that preserve compressed section palettes, validate checksums, and autosave after edits and Android lifecycle suspension.
+- Separate validated player-state saves for position and view direction, restored only when the saved pose is clear of solid blocks.
 - Android keyboard movement/look, touch-drag camera look, and OpenGL ES 3.0 / GLSL ES 3.00 backend; desktop OpenGL backend.
 - F3 debug overlay with FPS, frame time, visible chunk count, and renderer information.
 
@@ -33,7 +34,7 @@ These are API foundations, not a completed runtime. Package discovery, dependenc
 
 ## Current limitations
 
-This is **not yet a Bedrock-compatible game**. It starts with a 9 × 9 prototype chunk area and expands around the player, but does not unload distant chunks yet. The texture atlas is generated test content, not a real Bedrock resource-pack atlas. The custom Booking save file is not a Bedrock world format. Remaining work includes disk-backed chunk unloading/region storage, production terrain and biome generation, Bedrock block-state property definitions and exact palette serialization, lighting propagation, entity rendering/simulation, inventory and item systems, player-state persistence, networking, and full touch movement controls. The player and block-interaction systems are early foundations, not complete Bedrock gameplay.
+This is **not yet a Bedrock-compatible game**. It starts with a 9 × 9 prototype chunk area and expands around the player, but does not unload distant chunks yet. The texture atlas is generated test content, not a real Bedrock resource-pack atlas. The custom Booking save file is not a Bedrock world format. Remaining work includes disk-backed chunk unloading/region storage, production terrain and biome generation, Bedrock block-state property definitions and exact palette serialization, lighting propagation, entity rendering/simulation, inventory and item systems, inventory persistence, networking, and full touch movement controls. The player and block-interaction systems are early foundations, not complete Bedrock gameplay.
 
 Bedrock world, resource-pack, add-on, and server compatibility must be implemented and verified subsystem by subsystem. The project does not reuse proprietary RenderDragon code or game binaries.
 
