@@ -358,6 +358,7 @@ pub fn android_main(app: AndroidApp) {
         (spawn_position[0].floor() as i32).div_euclid(16),
         (spawn_position[2].floor() as i32).div_euclid(16),
     );
+    let mut stream_pending = false;
     let result = event_loop.run(move |event, active_loop| match event {
         Event::Resumed => {
             enable_android_immersive_fullscreen(&fullscreen_app);
@@ -750,22 +751,27 @@ pub fn android_main(app: AndroidApp) {
                 );
                 if current_stream_chunk != last_stream_chunk {
                     last_stream_chunk = current_stream_chunk;
+                    stream_pending = true;
                 }
 
                 // Generate and upload at most one missing chunk column per frame.
                 // This spreads terrain creation and GPU buffer uploads across
                 // multiple frames instead of blocking the render loop on a chunk ring.
-                if let Some(position) = engine.ensure_next_prototype_chunk_around(
-                    player_position[0].floor() as i32,
-                    player_position[2].floor() as i32,
-                    4,
-                ) {
-                    log::debug!("Booking streamed chunk {}, {}", position.x, position.z);
-                    if let Some((window, renderer)) = renderer_state.as_mut() {
-                        if let Err(error) = renderer.sync_world(&engine) {
-                            log::error!("Renderer sync after chunk streaming failed: {error}");
+                if stream_pending {
+                    if let Some(position) = engine.ensure_next_prototype_chunk_around(
+                        player_position[0].floor() as i32,
+                        player_position[2].floor() as i32,
+                        4,
+                    ) {
+                        log::debug!("Booking streamed chunk {}, {}", position.x, position.z);
+                        if let Some((window, renderer)) = renderer_state.as_mut() {
+                            if let Err(error) = renderer.sync_world(&engine) {
+                                log::error!("Renderer sync after chunk streaming failed: {error}");
+                            }
+                            window.request_redraw();
                         }
-                        window.request_redraw();
+                    } else {
+                        stream_pending = false;
                     }
                 }
 
