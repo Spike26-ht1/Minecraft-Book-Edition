@@ -10,13 +10,28 @@ registries, terrain generation, and CPU-side preparation of renderable chunks.
 - **book-world:** chunk columns, vertical sections, loaded-world lookup, and compact palette-backed block-state storage.
 - **book-meshing:** CPU geometry generation with neighbor-face culling.
 - **booking-engine:** world orchestration, built-in block registry, prototype
-  terrain generation, and section-mesh preparation.
+  terrain generation, player simulation, versioned world persistence, and
+  section-mesh preparation.
 - **book-renderer-api:** graphics-backend contract.
 - **book-renderer-opengl:** OpenGL / OpenGL ES backend and GPU presentation.
-- **book-client:** Android application lifecycle and input event loop.
+- **book-client:** Android application lifecycle, input event loop, world loading, autosaving, and player-centered chunk expansion.
 
 The renderer must consume world meshes prepared by Booking. Terrain generation
 and block registry logic must not be duplicated inside graphics backends.
+
+## World storage and streaming
+
+The current prototype generator creates deterministic multi-section terrain
+for individual chunk columns. As the player enters a new chunk, Booking ensures
+that a radius of nearby prototype chunks is loaded. Distant chunks are still
+kept in memory; disk-backed unloading and bounded residency remain planned.
+
+World persistence uses a versioned Booking binary container. Each vertical
+section stores its palette, packed indices, and validated dimensions. The file
+has a checksum and is written through a temporary sibling file before replace.
+The Android client loads the saved world at startup, saves after block edits,
+and saves again when the activity is suspended or the event loop exits. This
+is a project-specific format and is not compatible with Bedrock world files.
 
 ## Graphics targets
 
@@ -55,7 +70,7 @@ A requested capability is not automatically granted.
 
 ## Compatibility boundary
 
-The current terrain generator and built-in texture atlas are prototypes. Camera state and basic Android touch-look/keyboard movement are now connected to the renderer. The world format, biome and
+The current terrain generator and built-in texture atlas are prototypes. Camera state, player gravity/collision, keyboard movement, touch-look, and basic block interaction are now connected to the renderer. The world format, biome and
 noise algorithms, block states, lighting model, resource-pack rendering,
 entity pipeline, and Bedrock network protocol are not yet Bedrock-compatible.
 Those systems must be implemented and tested independently before claiming
