@@ -24,6 +24,15 @@ pub struct PalettedBlockStorage {
     data: Vec<u64>,
 }
 
+/// Safe, validated export of palette-compressed section storage.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PalettedBlockStorageSnapshot {
+    pub capacity: usize,
+    pub bits_per_entry: u8,
+    pub palette: Vec<BlockState>,
+    pub data: Vec<u64>,
+}
+
 impl PalettedBlockStorage {
     pub fn new(capacity: usize) -> Self {
         let mut palette_indices = std::collections::BTreeMap::new();
@@ -43,6 +52,57 @@ impl PalettedBlockStorage {
     pub fn is_empty(&self) -> bool { self.capacity == 0 }
     pub fn bits_per_entry(&self) -> u8 { self.bits_per_entry }
     pub fn palette(&self) -> &[BlockState] { &self.palette }
+
+    pub fn snapshot(&self) -> PalettedBlockStorageSnapshot {
+        PalettedBlockStorageSnapshot {
+            capacity: self.capacity,
+            bits_per_entry: self.bits_per_entry,
+            palette: self.palette.clone(),
+            data: self.data.clone(),
+        }
+    }
+
+    /// Reconstructs packed storage only after validating all dimensions,
+    /// palette indices, and word counts from untrusted save data.
+    pub fn from_snapshot(snapshot: PalettedBlockStorageSnapshot) -> Option<Self> {
+        if snapshot.bits_per_entry < 4 || snapshot.bits_per_entry > 16
+            || snapshot.palette.is_empty()
+            || snapshot.palette.len() > (1_usize << snapshot.bits_per_entry)
+            || snapshot.palette.first().copied() != Some(BlockState::AIR)
+        {
+            return None;
+        }
+
+        let total_bits = snapshot.capacity.checked_mul(snapshot.bits_per_entry as usize)?;
+        let rounded_bits = total_bits.checked_add(63)?;
+        let expected_words = rounded_bits / 64;
+        if snapshot.data.len() != expected_words {
+            return None;
+        }
+
+        let mut palette_indices = std::collections::BTreeMap::new();
+        for (index, state) in snapshot.palette.iter().copied().enumerate() {
+            let index = u16::try_from(index).ok()?;
+            if palette_indices.insert(state, index).is_some() {
+                return None;
+            }
+        }
+
+        let storage = Self {
+            capacity: snapshot.capacity,
+            bits_per_entry: snapshot.bits_per_entry,
+            palette: snapshot.palette,
+            palette_indices,
+            data: snapshot.data,
+        };
+
+        if (0..storage.capacity).any(|index| {
+            storage.read_index(index) as usize >= storage.palette.len()
+        }) {
+            return None;
+        }
+        Some(storage)
+    }
 
     pub fn get(&self, index: usize) -> Option<BlockState> {
         if index >= self.capacity { return None; }
@@ -137,6 +197,19 @@ impl Default for ChunkSection {
 impl ChunkSection {
     pub fn new() -> Self { Self::default() }
 
+    pub fn snapshot(&self) -> PalettedBlockStorageSnapshot {
+        self.storage.snapshot()
+    }
+
+    pub fn from_snapshot(snapshot: PalettedBlockStorageSnapshot) -> Option<Self> {
+        if snapshot.capacity != SECTION_VOLUME {
+            return None;
+        }
+        Some(Self {
+            storage: PalettedBlockStorage::from_snapshot(snapshot)?,
+        })
+    }
+
     /// Returns the linear array index for local section coordinates.
     pub fn index(x: usize, y: usize, z: usize) -> Option<usize> {
         if x >= SECTION_EDGE || y >= SECTION_EDGE || z >= SECTION_EDGE {
@@ -197,6 +270,10 @@ impl ChunkColumn {
 
     pub fn section_count(&self) -> usize {
         self.sections.len()
+    }
+
+    pub fn insert_section(&mut self, section_y: i32, section: ChunkSection) -> Option<ChunkSection> {
+        self.sections.insert(section_y, section)
     }
 
     /// Iterates loaded vertical sections in ascending world-height order.
@@ -375,6 +452,10 @@ impl ChunkManager {
 
     pub fn loaded_count(&self) -> usize {
         self.columns.len()
+    }
+
+    pub fn clear(&mut self) {
+        self.columns.clear();
     }
 
     pub fn is_loaded(&self, position: ChunkPos) -> bool {
