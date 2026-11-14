@@ -56,47 +56,88 @@ impl BookingEngine {
     pub fn world(&self) -> &ChunkManager { &self.world }
     pub fn world_mut(&mut self) -> &mut ChunkManager { &mut self.world }
 
-    /// Generates deterministic multi-section terrain around the origin.
-    ///
-    /// This is a temporary Booking terrain generator, not Bedrock's production
-    /// noise/biome/structure pipeline. It creates a 96-block vertical range
-    /// with a bedrock floor, stone, dirt, and a grass surface.
+    /// Generates the initial prototype terrain around the origin.
+    /// Existing columns are preserved so this method is safe on loaded worlds.
     pub fn generate_prototype_terrain(&mut self, chunk_radius: i32) {
         let radius = chunk_radius.max(0);
-        const MIN_Y: i32 = -32;
-
         for chunk_z in -radius..=radius {
             for chunk_x in -radius..=radius {
-                let position = ChunkPos { x: chunk_x, z: chunk_z };
-                let mut column = ChunkColumn::new(position);
-
-                for local_z in 0..SECTION_EDGE {
-                    for local_x in 0..SECTION_EDGE {
-                        let world_x = chunk_x * SECTION_EDGE as i32 + local_x as i32;
-                        let world_z = chunk_z * SECTION_EDGE as i32 + local_z as i32;
-                        let broad = value_noise(world_x as f32 / 48.0, world_z as f32 / 48.0);
-                        let detail = value_noise(world_x as f32 / 17.0, world_z as f32 / 17.0);
-                        let surface_y = (27.0 + broad * 9.0 + detail * 3.0)
-                            .round()
-                            .clamp(16.0, 40.0) as i32;
-
-                        column.set_block(local_x, MIN_Y, local_z, BlockId(4));
-                        for world_y in (MIN_Y + 1)..=surface_y {
-                            let block = if world_y == surface_y {
-                                BlockId(1)
-                            } else if world_y >= surface_y - 3 {
-                                BlockId(2)
-                            } else {
-                                BlockId(3)
-                            };
-                            column.set_block(local_x, world_y, local_z, block);
-                        }
-                    }
-                }
-
-                self.world.insert_column(column);
+                self.generate_prototype_chunk(chunk_x, chunk_z);
             }
         }
+    }
+
+    /// Ensures prototype terrain exists around the player's current chunk.
+    /// Returns the number of newly generated chunk columns. Chunks are kept
+    /// resident for now; disk-backed unloading is a later streaming stage.
+    pub fn ensure_prototype_chunks_around(
+        &mut self,
+        world_x: i32,
+        world_z: i32,
+        chunk_radius: i32,
+    ) -> usize {
+        let (center, _, _) = ChunkManager::locate(world_x, world_z);
+        let radius = chunk_radius.clamp(0, 8);
+        let mut generated = 0;
+
+        for offset_z in -radius..=radius {
+            for offset_x in -radius..=radius {
+                let Some(chunk_x) = center.x.checked_add(offset_x) else {
+                    continue;
+                };
+                let Some(chunk_z) = center.z.checked_add(offset_z) else {
+                    continue;
+                };
+                if self.generate_prototype_chunk(chunk_x, chunk_z) {
+                    generated += 1;
+                }
+            }
+        }
+        generated
+    }
+
+    fn generate_prototype_chunk(&mut self, chunk_x: i32, chunk_z: i32) -> bool {
+        let position = ChunkPos { x: chunk_x, z: chunk_z };
+        if self.world.is_loaded(position) {
+            return false;
+        }
+
+        let Some(origin_x) = chunk_x.checked_mul(SECTION_EDGE as i32) else {
+            return false;
+        };
+        let Some(origin_z) = chunk_z.checked_mul(SECTION_EDGE as i32) else {
+            return false;
+        };
+
+        const MIN_Y: i32 = -32;
+        let mut column = ChunkColumn::new(position);
+
+        for local_z in 0..SECTION_EDGE {
+            for local_x in 0..SECTION_EDGE {
+                let world_x = origin_x + local_x as i32;
+                let world_z = origin_z + local_z as i32;
+                let broad = value_noise(world_x as f32 / 48.0, world_z as f32 / 48.0);
+                let detail = value_noise(world_x as f32 / 17.0, world_z as f32 / 17.0);
+                let surface_y = (27.0 + broad * 9.0 + detail * 3.0)
+                    .round()
+                    .clamp(16.0, 40.0) as i32;
+
+                column.set_block(local_x, MIN_Y, local_z, BlockId(4));
+                for world_y in (MIN_Y + 1)..=surface_y {
+                    let block = if world_y == surface_y {
+                        BlockId(1)
+                    } else if world_y >= surface_y - 3 {
+                        BlockId(2)
+                    } else {
+                        BlockId(3)
+                    };
+                    column.set_block(local_x, world_y, local_z, block);
+                }
+            }
+        }
+
+        self.world.insert_column(column);
+        true
     }
 
     /// Builds CPU meshes for every loaded vertical section.
@@ -152,6 +193,35 @@ mod tests {
         let mut engine = BookingEngine::new();
         engine.generate_prototype_terrain(1);
         assert!(engine.world().column(ChunkPos { x: -1, z: -1 }).is_some());
+    }
+
+    #[test]
+    fn streaming_generates_missing_chunks_without_overwriting_edits() {
+        let mut engine = BookingEngine::new();
+        engine.generate_prototype_terrain(0);
+        assert!(engine.world_mut().set_block(3, 30, 3, BlockId(4)));
+
+        let generated = engine.ensure_prototype_chunks_around(16, 0, 1);
+        assert_eq!(generated, 8);
+        assert_eq!(engine.loaded_chunk_count(), 9);
+        assert_eq!(engine.world().get_block(3, 30, 3), Some(BlockId(4)));
+        assert!(engine.world().column(ChunkPos { x: 2, z: 0 }).is_some());
+    }
+
+    #[test]
+    fn streaming_uses_euclidean_chunk_coordinates_for_negative_positions() {
+        let mut engine = BookingEngine::new();
+        assert_eq!(engine.ensure_prototype_chunks_around(-1, -1, 0), 1);
+        assert!(engine.world().column(ChunkPos { x: -1, z: -1 }).is_some());
+    }
+
+    #[test]
+    fn terrain_generation_does_not_replace_loaded_chunk_data() {
+        let mut engine = BookingEngine::new();
+        engine.generate_prototype_terrain(0);
+        assert!(engine.world_mut().set_block(1, 20, 1, BlockId(4)));
+        engine.generate_prototype_terrain(0);
+        assert_eq!(engine.world().get_block(1, 20, 1), Some(BlockId(4)));
     }
 }
 
