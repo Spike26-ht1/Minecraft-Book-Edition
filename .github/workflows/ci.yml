@@ -1,0 +1,96 @@
+name: Rust CI
+run-name: Minecraft Book Edition — Pre-Alpha 1.2.0
+
+
+on:
+  push:
+    branches: [main, "foundation/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, x86_64)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: rustfmt
+      - name: Install Linux graphics dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libx11-dev libxkbcommon-dev libwayland-dev libegl1-mesa-dev libgl1-mesa-dev
+      - name: Verify 64-bit target
+        run: rustc --print cfg --target ${{ matrix.target }}
+      - name: Format Rust sources
+        run: cargo fmt --all
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run tests (x86_64)
+        run: cargo test --workspace --target ${{ matrix.target }}
+      - name: Build 26.60 client (x86_64)
+        run: cargo build -p book-client --target ${{ matrix.target }} --release
+
+  android-arm64:
+    name: Android ARM64 APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Configure Android SDK and install NDK
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          installed=0
+          for attempt in 1 2 3; do
+            if "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"; then
+              installed=1
+              break
+            fi
+            echo "Android SDK download failed (attempt $attempt/3); retrying..."
+            rm -rf "$SDK_ROOT/ndk/27.2.12479018"
+            sleep 5
+          done
+          test "$installed" -eq 1
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Install cargo-apk
+        run: cargo install cargo-apk --locked
+      - name: Configure side-by-side fullscreen test package
+        run: |
+          sed -i 's/com.spike26.minecraftbookedition/com.spike26.minecraftbookedition.fullscreenfix/g' crates/book-client/Cargo.toml crates/book-client/src/lib.rs
+          sed -i 's/Minecraft Book Edition Pre-Alpha 1.2.0/Minecraft Book Edition Fullscreen Fix Test/' crates/book-client/Cargo.toml
+      - name: Build Android ARM64 fullscreen-fix test APK
+        run: cargo apk build -p book-client --lib --target aarch64-linux-android
+      - name: Validate Android APK
+        run: |
+          APK="$(find target -type f -name '*.apk' ! -name '*unaligned.apk' -print -quit)"
+          test -n "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK"
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libmain.so'
+          unzip -l "$APK" | grep 'ic_launcher.png'
+          mkdir -p dist
+          cp "$APK" dist/Minecraft_Book_Edition_Fullscreen_Fix_Test_android_arm64.apk
+          sha256sum dist/Minecraft_Book_Edition_Fullscreen_Fix_Test_android_arm64.apk
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: minecraft-book-edition-fullscreen-fix-test-android-arm64
+          path: dist/Minecraft_Book_Edition_Fullscreen_Fix_Test_android_arm64.apk
+          if-no-files-found: error

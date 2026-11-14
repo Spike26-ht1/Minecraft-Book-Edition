@@ -1,0 +1,14 @@
+[package]
+name = "booking-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+book-core = { path = "../book-core" }
+book-world = { path = "../book-world" }
+book-meshing = { path = "../book-meshing" }
+
+[lints]
+workspace = true
