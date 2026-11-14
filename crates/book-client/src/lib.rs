@@ -8,6 +8,7 @@ use glium::winit::event::{ElementState, Event, MouseButton, TouchPhase, WindowEv
 use glium::winit::event_loop::ControlFlow;
 use glium::winit::keyboard::{KeyCode, PhysicalKey};
 use glium::winit::platform::android::activity::AndroidApp;
+use android_activity::WindowManagerFlags;
 use glium::winit::platform::android::EventLoopBuilderExtAndroid;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -97,6 +98,60 @@ fn initialize_android_logging() {
     ));
 }
 
+fn enable_android_immersive_fullscreen(app: &AndroidApp) {
+    app.set_window_flags(
+        WindowManagerFlags::FULLSCREEN | WindowManagerFlags::KEEP_SCREEN_ON,
+        WindowManagerFlags::empty(),
+    );
+
+    // Hide both Android system bars for gameplay. Android can temporarily
+    // reveal them when the player swipes from an edge; IMMERSIVE_STICKY then
+    // lets the system hide them again automatically.
+    let java_app = app.clone();
+    app.run_on_java_main_thread(Box::new(move || {
+        use jni::objects::JObject;
+        use jni::vm::JavaVM;
+        use jni::JValue;
+        use std::mem::ManuallyDrop;
+
+        let vm = unsafe { JavaVM::from_raw(java_app.vm_as_ptr().cast()) };
+        let result = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+            // activity_as_ptr is an unowned JNI global reference. Wrap it in
+            // ManuallyDrop so JObject does not try to delete the global ref.
+            let activity_global = ManuallyDrop::new(unsafe {
+                JObject::from_raw(java_app.activity_as_ptr() as jni::sys::jobject)
+            });
+            let activity = env.new_local_ref(&*activity_global)?;
+            let window = env
+                .call_method(&activity, "getWindow", "()Landroid/view/Window;", &[])?
+                .l()?;
+            let decor_view = env
+                .call_method(&window, "getDecorView", "()Landroid/view/View;", &[])?
+                .l()?;
+
+            const IMMERSIVE_FLAGS: i32 =
+                0x00000100 // SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | 0x00000200 // SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | 0x00000400 // SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | 0x00000002 // SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | 0x00000004 // SYSTEM_UI_FLAG_FULLSCREEN
+                | 0x00001000; // SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+
+            env.call_method(
+                &decor_view,
+                "setSystemUiVisibility",
+                "(I)V",
+                &[JValue::Int(IMMERSIVE_FLAGS)],
+            )?;
+            Ok(())
+        });
+
+        if let Err(error) = result {
+            log::warn!("Could not enable Android immersive fullscreen: {error}");
+        }
+    }));
+}
+
 fn derive_media_root(external_files_path: &Path) -> Option<PathBuf> {
     // AndroidApp exposes Android/data/<package>/files. Its app-specific media
     // directory is the sibling Android/media/<package>.
@@ -178,6 +233,8 @@ fn initialize_storage(app: &AndroidApp) -> Option<PathBuf> {
 #[unsafe(no_mangle)]
 pub fn android_main(app: AndroidApp) {
     initialize_android_logging();
+    enable_android_immersive_fullscreen(&app);
+    let fullscreen_app = app.clone();
     let storage_root = match initialize_storage(&app) {
         Some(root) => {
             book_renderer_opengl::record_android_diagnostic("android_main: storage is ready");
@@ -295,6 +352,7 @@ pub fn android_main(app: AndroidApp) {
     );
     let result = event_loop.run(move |event, active_loop| match event {
         Event::Resumed => {
+            enable_android_immersive_fullscreen(&fullscreen_app);
             log::info!("Android lifecycle: Resumed");
             book_renderer_opengl::record_android_diagnostic("Android lifecycle: Resumed");
             if renderer_state.is_none() {
@@ -369,6 +427,9 @@ pub fn android_main(app: AndroidApp) {
 
             match event {
                 WindowEvent::Focused(focused) => {
+                    if focused {
+                        enable_android_immersive_fullscreen(&fullscreen_app);
+                    }
                     if !focused {
                         pressed_keys.clear();
                         active_touches.clear();
