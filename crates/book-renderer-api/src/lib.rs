@@ -64,10 +64,93 @@ impl CameraState {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MobileControlsState {
+    /// Horizontal movement: left=-1, right=1.
+    pub strafe: f32,
+    /// Forward movement: forward=1, backward=-1.
+    pub forward: f32,
+    pub jump_pressed: bool,
+    pub sprint_pressed: bool,
+    pub break_pressed: bool,
+    pub place_pressed: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TouchRect {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl TouchRect {
+    pub fn contains(&self, point: [f32; 2]) -> bool {
+        point[0] >= self.x
+            && point[0] <= self.x + self.width
+            && point[1] >= self.y
+            && point[1] <= self.y + self.height
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MobileControlsLayout {
+    pub joystick_center: [f32; 2],
+    pub joystick_radius: f32,
+    pub jump: TouchRect,
+    pub sprint: TouchRect,
+    pub break_block: TouchRect,
+    pub place_block: TouchRect,
+    pub debug: TouchRect,
+}
+
+impl MobileControlsLayout {
+    /// Shared pixel-coordinate layout used by both rendering and touch hit tests.
+    pub fn new(width: u32, height: u32) -> Self {
+        let width = width.max(1) as f32;
+        let height = height.max(1) as f32;
+        let button_size = (height * 0.088).clamp(56.0, 76.0).min(width * 0.22);
+        let gap = (button_size * 0.14).max(8.0);
+        let side_margin = (width * 0.035).clamp(16.0, 32.0);
+        let bottom_safe = (height * 0.15).clamp(84.0, 132.0);
+        let right_x = (width - side_margin - (button_size * 2.0 + gap)).max(width * 0.40);
+        let top_y = (height - bottom_safe - (button_size * 2.0 + gap)).max(height * 0.35);
+        let rect = |x: f32, y: f32| TouchRect {
+            x, y, width: button_size, height: button_size,
+        };
+        let joystick_radius = (height * 0.095).clamp(54.0, 82.0).min(width * 0.22);
+        let joystick_center = [
+            (width * 0.15).clamp(joystick_radius + 12.0, width * 0.34),
+            height - bottom_safe - joystick_radius,
+        ];
+        Self {
+            joystick_center,
+            joystick_radius,
+            jump: rect(right_x, top_y),
+            sprint: rect(right_x + button_size + gap, top_y),
+            break_block: rect(right_x, top_y + button_size + gap),
+            place_block: rect(right_x + button_size + gap, top_y + button_size + gap),
+            debug: TouchRect {
+                x: width - side_margin - 64.0,
+                y: (height * 0.10).clamp(60.0, 96.0),
+                width: 56.0,
+                height: 34.0,
+            },
+        }
+    }
+
+    pub fn joystick_contains(&self, point: [f32; 2]) -> bool {
+        let dx = point[0] - self.joystick_center[0];
+        let dy = point[1] - self.joystick_center[1];
+        dx * dx + dy * dy <= self.joystick_radius * self.joystick_radius * 1.35
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RenderFrame {
     pub clear_color: ClearColor,
     pub camera: CameraState,
+    pub mobile_controls: MobileControlsState,
 }
 
 impl Default for RenderFrame {
@@ -75,6 +158,7 @@ impl Default for RenderFrame {
         Self {
             clear_color: ClearColor::SKY,
             camera: CameraState::default(),
+            mobile_controls: MobileControlsState::default(),
         }
     }
 }
