@@ -1,0 +1,49 @@
+[package]
+name = "book-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "main"
+crate-type = ["cdylib"]
+
+[dependencies]
+booking-engine = { path = "../booking-engine" }
+book-assets = { path = "../book-assets" }
+book-core = { path = "../book-core" }
+book-renderer-api = { path = "../book-renderer-api" }
+book-renderer-opengl = { path = "../book-renderer-opengl" }
+glium = "0.36"
+winit = { version = "0.30", features = ["android-native-activity"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.15"
+android-activity = { version = "0.6.1", features = ["native-activity"] }
+jni = "0.22.4"
+log = "0.4"
+
+[package.metadata.android]
+package = "com.spike26.minecraftbookedition"
+apk_name = "minecraft-book-edition-prealpha-1.2.0"
+build_targets = ["aarch64-linux-android"]
+resources = "res"
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 35
+
+[package.metadata.android.application]
+label = "Minecraft Book Edition Pre-Alpha 1.2.0"
+icon = "@mipmap/ic_launcher"
+theme = "@style/BookingSplashTheme"
+debuggable = true
+
+[package.metadata.android.application.activity]
+orientation = "landscape"
+resizeable_activity = false
+config_changes = "orientation|keyboardHidden|screenSize"
+
+[lints]
+workspace = true

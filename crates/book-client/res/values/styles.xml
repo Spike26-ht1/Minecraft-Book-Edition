@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="BookingSplashTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@drawable/booking_splash</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:statusBarColor">#08111D</item>
+        <item name="android:navigationBarColor">#08111D</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowSoftInputMode">stateAlwaysHidden</item>
+    </style>
+</resources>

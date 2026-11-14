@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/book-core", "crates/book-world", "crates/book-assets", "crates/book-meshing", "crates/book-renderer-api", "crates/book-renderer-opengl", "crates/book-client", "crates/book-mod-api", "crates/booking-engine"]
+default-members = ["crates/book-client"]
+
+[workspace.package]
+version = "1.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Minecraft Book Edition contributors"]
+repository = "https://github.com/Spike26-ht1/Minecraft-Book-Edition"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace.lints.rust]
+unsafe_code = "deny"

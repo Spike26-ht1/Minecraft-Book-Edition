@@ -1,0 +1,22 @@
+[package]
+name = "book-renderer-opengl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+book-assets = { path = "../book-assets" }
+booking-engine = { path = "../booking-engine" }
+book-core = { path = "../book-core" }
+book-world = { path = "../book-world" }
+book-meshing = { path = "../book-meshing" }
+book-renderer-api = { path = "../book-renderer-api" }
+glium = "0.36"
+glutin = "0.32"
+glutin-winit = "0.5"
+raw-window-handle = "0.6"
+log = "0.4"
+
+[lints]
+workspace = true

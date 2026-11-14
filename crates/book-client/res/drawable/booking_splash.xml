@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#070B12"
+                android:centerColor="#0C1522"
+                android:endColor="#142538"
+                android:type="linear" />
+        </shape>
+    </item>
+    <item
+        android:drawable="@drawable/booking_mark"
+        android:width="112dp"
+        android:height="112dp"
+        android:gravity="center" />
+</layer-list>
