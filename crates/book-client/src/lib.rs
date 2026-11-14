@@ -405,6 +405,7 @@ pub fn android_main(app: AndroidApp) {
         }
     });
 
+    book_renderer_opengl::record_android_diagnostic("Startup: preparing player state");
     let mut player = match player_save_path.as_ref() {
         Some(path) if path.exists() => match PlayerController::load_from_path(&engine, path) {
             Ok(player) => {
@@ -425,6 +426,7 @@ pub fn android_main(app: AndroidApp) {
         },
         _ => PlayerController::spawn(&engine, 0, 0).unwrap_or_default(),
     };
+    book_renderer_opengl::record_android_diagnostic("Startup: player state ready");
     let mut frame = RenderFrame::default();
     frame.camera.position = player.camera_position();
     frame.camera.yaw = player.yaw();
@@ -448,7 +450,14 @@ pub fn android_main(app: AndroidApp) {
     );
     let mut stream_pending = true;
     let mut renderer_loading = true;
-    let result = event_loop.run(move |event, active_loop| match event {
+    book_renderer_opengl::record_android_diagnostic("Winit: entering event_loop.run");
+    let mut first_winit_event = true;
+    let result = event_loop.run(move |event, active_loop| {
+        if first_winit_event {
+            first_winit_event = false;
+            book_renderer_opengl::record_android_diagnostic("Winit: first event callback received");
+        }
+        match event {
         Event::Resumed => {
             enable_android_immersive_fullscreen(&fullscreen_app);
             log::info!("Android lifecycle: Resumed");
@@ -1002,6 +1011,7 @@ pub fn android_main(app: AndroidApp) {
             book_renderer_opengl::record_android_diagnostic("Winit: event loop is exiting");
         }
         _ => {}
+        }
     });
     if let Err(error) = result {
         log::error!("Winit Android event loop returned an error: {error}");
