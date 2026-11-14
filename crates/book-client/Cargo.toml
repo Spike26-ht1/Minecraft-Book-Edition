@@ -19,6 +19,8 @@ winit = { version = "0.30", features = ["android-native-activity"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
+android-activity = { version = "0.6.1", features = ["native-activity"] }
+jni = "0.22.4"
 log = "0.4"
 
 [package.metadata.android]
@@ -34,7 +36,13 @@ target_sdk_version = 35
 [package.metadata.android.application]
 label = "Minecraft Book Edition Pre-Alpha 1.2.0"
 icon = "@mipmap/ic_launcher"
+theme = "@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
 debuggable = true
+
+[package.metadata.android.application.activity]
+orientation = "landscape"
+resizeable_activity = false
+config_changes = "orientation|keyboardHidden|screenSize"
 
 [lints]
 workspace = true
