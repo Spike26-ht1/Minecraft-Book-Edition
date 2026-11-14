@@ -296,7 +296,7 @@ impl OpenGlRenderer {
 
         let (screen_width, screen_height) = display.get_framebuffer_dimensions();
         let mut debug_overlay_vertices =
-            build_debug_overlay_vertices(screen_width, screen_height, 0, 0.0, 0, 0);
+            build_debug_overlay_vertices(screen_width, screen_height, 0, 0.0, 0, 0, 0);
         let debug_overlay_buffer = VertexBuffer::dynamic(&display, &debug_overlay_vertices)
             .map_err(|error| RendererError::new(format!("Debug overlay buffer allocation: {error}")))?;
         let now = Instant::now();
@@ -439,6 +439,7 @@ impl OpenGlRenderer {
                 self.fps,
                 self.last_frame_ms,
                 self.visible_chunk_count,
+                self.chunk_meshes.len(),
                 vertex_count,
             ));
 
@@ -614,6 +615,18 @@ fn voxel_camera_matrix(aspect: f32, camera: CameraState) -> [[f32; 4]; 4] {
 }
 
 #[cfg(test)]
+mod hud_buffer_tests {
+    use super::build_debug_overlay_vertices;
+
+    #[test]
+    fn debug_overlay_vertex_count_is_stable_for_changing_statistics() {
+        let initial = build_debug_overlay_vertices(1536, 864, 0, 0.0, 0, 0, 0);
+        let active = build_debug_overlay_vertices(1536, 864, 999, 999.99, 126, 126, 999_999);
+        assert_eq!(initial.len(), active.len());
+    }
+}
+
+#[cfg(test)]
 mod camera_tests {
     use super::{voxel_camera_matrix, CameraState};
 
@@ -632,6 +645,7 @@ fn build_debug_overlay_vertices(
     fps: u32,
     frame_ms: f32,
     visible_chunks: usize,
+    total_chunks: usize,
     vertex_count: usize,
 ) -> Vec<DebugVertex> {
     let lines = [
@@ -640,7 +654,7 @@ fn build_debug_overlay_vertices(
         format!("FRAME: {:>6.2} MS", frame_ms.clamp(0.0, 999.99)),
         "RENDERER: BOOKING".to_owned(),
         "API: OPENGL ES / OPENGL".to_owned(),
-        format!("CHUNKS: {:>3} / {:>3}", visible_chunks.min(999), 126),
+        format!("CHUNKS: {:>3} / {:>3}", visible_chunks.min(999), total_chunks.min(999)),
         "BLOCKS: PROCEDURAL WORLD".to_owned(),
         format!("VERTICES: {:>9}", vertex_count.min(999_999_999)),
         "F3: HIDE DEBUG".to_owned(),
