@@ -486,7 +486,7 @@ pub fn android_main(app: AndroidApp) {
                         }
                         TouchPhase::Moved => {
                             let role = touch_roles.get(&touch_id).copied().unwrap_or(ActiveTouch::Look);
-                            active_touches.insert(touch_id, location);
+                            let previous_location = active_touches.insert(touch_id, location);
                             match role {
                                 ActiveTouch::Joystick => {
                                     if let Some((window, _)) = renderer_state.as_ref() {
@@ -499,7 +499,7 @@ pub fn android_main(app: AndroidApp) {
                                     }
                                 }
                                 ActiveTouch::Look => {
-                                    if let Some(previous) = active_touches.get(&touch_id).copied() {
+                                    if let Some(previous) = previous_location {
                                         player.look(
                                             ((location.0 - previous.0) as f32) * 0.004,
                                             -((location.1 - previous.1) as f32) * 0.004,
