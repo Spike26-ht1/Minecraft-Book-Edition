@@ -387,6 +387,7 @@ impl OpenGlRenderer {
     }
 
     /// Uploads all missing columns. Intended for explicit bulk synchronization, not startup.
+    pub fn sync_world(&mut self, engine: &BookingEngine) -> Result<(), RendererError> {
         let loaded: BTreeSet<(i32, i32)> = engine.world()
             .iter()
             .map(|(position, _)| (position.x, position.z))
