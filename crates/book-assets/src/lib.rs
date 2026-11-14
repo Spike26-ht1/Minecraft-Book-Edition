@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path};
 
 /// Parsed subset of a Bedrock-style terrain_texture.json file.
 /// Texture declarations are retained as JSON because Bedrock supports multiple shapes.
