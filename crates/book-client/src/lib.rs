@@ -339,6 +339,13 @@ pub fn android_main(app: AndroidApp) {
             }
         }
         Event::Suspended => {
+            pressed_keys.clear();
+            active_touches.clear();
+            touch_start_positions.clear();
+            touch_start_times.clear();
+            touch_roles.clear();
+            jump_queued = false;
+            frame.mobile_controls = MobileControlsState::default();
             if world_save_enabled {
                 save_world_if_available(&engine, world_save_path.as_deref());
                 save_player_if_available(&player, player_save_path.as_deref());
@@ -364,6 +371,15 @@ pub fn android_main(app: AndroidApp) {
 
             match event {
                 WindowEvent::Focused(focused) => {
+                    if !focused {
+                        pressed_keys.clear();
+                        active_touches.clear();
+                        touch_start_positions.clear();
+                        touch_start_times.clear();
+                        touch_roles.clear();
+                        jump_queued = false;
+                        frame.mobile_controls = MobileControlsState::default();
+                    }
                     log::info!("Android window focus changed: focused={focused}");
                     book_renderer_opengl::record_android_diagnostic(&format!(
                         "Android window focus changed: focused={focused}"
