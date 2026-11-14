@@ -943,12 +943,25 @@ fn push_rect(vertices: &mut Vec<DebugVertex>, x: f32, y: f32, width: f32, height
 fn draw_character(vertices: &mut Vec<DebugVertex>, character: char, x: f32, y: f32, scale: f32) {
     let rows = glyph(character);
     let white = [0.92, 0.96, 1.0, 1.0];
+    let transparent = [0.0, 0.0, 0.0, 0.0];
+
+    // Emit all 35 cells, including transparent pixels. This keeps the debug
+    // overlay VBO length constant when changing digits (FPS, frame time, etc.).
     for (row_index, row) in rows.iter().enumerate() {
         for column in 0..5 {
-            if row & (1 << (4 - column)) != 0 {
-                push_rect(vertices, x + column as f32 * scale,
-                    y + row_index as f32 * scale, scale, scale, white);
-            }
+            let color = if row & (1 << (4 - column)) != 0 {
+                white
+            } else {
+                transparent
+            };
+            push_rect(
+                vertices,
+                x + column as f32 * scale,
+                y + row_index as f32 * scale,
+                scale,
+                scale,
+                color,
+            );
         }
     }
 }
