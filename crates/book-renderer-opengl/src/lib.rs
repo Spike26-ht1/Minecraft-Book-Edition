@@ -27,7 +27,7 @@ use glium::uniform;
 use glium::{implement_vertex, Blend, Depth, DepthTest, DrawParameters, Program, Surface, VertexBuffer};
 use glutin::surface::WindowSurface;
 use std::collections::{BTreeMap, BTreeSet};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "android")]
 use std::fs::OpenOptions;
