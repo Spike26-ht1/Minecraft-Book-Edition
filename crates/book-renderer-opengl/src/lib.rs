@@ -231,6 +231,8 @@ pub struct OpenGlRenderer {
     debug_overlay_buffer: VertexBuffer<DebugVertex>,
     debug_overlay_vertices: Vec<DebugVertex>,
     debug_overlay_updated: Instant,
+    loading_overlay_buffer: VertexBuffer<DebugVertex>,
+    loading_progress: Option<(usize, usize)>,
     #[cfg(target_os = "android")]
     mobile_controls_buffer: VertexBuffer<DebugVertex>,
     #[cfg(target_os = "android")]
@@ -299,6 +301,9 @@ impl OpenGlRenderer {
             build_debug_overlay_vertices(screen_width, screen_height, 0, 0.0, 0, 0, 0);
         let debug_overlay_buffer = VertexBuffer::dynamic(&display, &debug_overlay_vertices)
             .map_err(|error| RendererError::new(format!("Debug overlay buffer allocation: {error}")))?;
+        let loading_overlay_vertices = build_loading_overlay_vertices(screen_width, screen_height, 0, 81);
+        let loading_overlay_buffer = VertexBuffer::dynamic(&display, &loading_overlay_vertices)
+            .map_err(|error| RendererError::new(format!("Loading overlay buffer allocation: {error}")))?;
         let now = Instant::now();
 
         #[cfg(target_os = "android")]
@@ -333,6 +338,8 @@ impl OpenGlRenderer {
             debug_overlay_buffer,
             debug_overlay_vertices,
             debug_overlay_updated: now,
+            loading_overlay_buffer,
+            loading_progress: Some((0, 81)),
             #[cfg(target_os = "android")]
             mobile_controls_buffer,
             #[cfg(target_os = "android")]
@@ -414,6 +421,40 @@ impl OpenGlRenderer {
     }
 
     pub fn toggle_debug(&mut self) { self.debug_visible = !self.debug_visible; }
+
+    /// Updates the temporary startup progress overlay without reallocating its GPU buffer.
+    pub fn set_loading_progress(&mut self, completed: usize, total: usize) {
+        let total = total.max(1);
+        let completed = completed.min(total);
+        let (width, height) = self.display.get_framebuffer_dimensions();
+        let vertices = build_loading_overlay_vertices(width, height, completed, total);
+        if vertices.len() == self.loading_overlay_buffer.len() {
+            self.loading_overlay_buffer.write(&vertices);
+            self.loading_progress = Some((completed, total));
+        } else {
+            log::error!("Loading overlay vertex count changed unexpectedly");
+        }
+    }
+
+    /// Removes the temporary loading screen after the initial spawn area is ready.
+    pub fn finish_loading(&mut self) {
+        self.loading_progress = None;
+    }
+
+    fn draw_loading_overlay(&self, target: &mut glium::Frame) -> Result<(), RendererError> {
+        let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
+        let params = DrawParameters {
+            blend: Blend::alpha_blending(),
+            ..DrawParameters::default()
+        };
+        target.draw(
+            &self.loading_overlay_buffer,
+            NoIndices(glium::index::PrimitiveType::TrianglesList),
+            &self.debug_program,
+            &uniform! { u_screen: [screen_width as f32, screen_height as f32] },
+            &params,
+        ).map_err(|error| RendererError::new(format!("Loading overlay draw: {error}")))
+    }
 
     fn update_frame_stats(&mut self) {
         let now = Instant::now();
@@ -560,6 +601,9 @@ impl RendererBackend for OpenGlRenderer {
         if self.debug_visible { self.draw_debug_overlay(&mut target)?; }
         #[cfg(target_os = "android")]
         self.draw_mobile_controls(&mut target, frame.mobile_controls, frame.settings)?;
+        if self.loading_progress.is_some() {
+            self.draw_loading_overlay(&mut target)?;
+        }
         target.finish().map_err(|error| RendererError::new(format!("OpenGL present: {error}")))?;
         #[cfg(target_os = "android")]
         if !self.first_frame_logged {
@@ -637,6 +681,54 @@ mod camera_tests {
             assert!(matrix.iter().flatten().all(|value| value.is_finite()));
         }
     }
+}
+
+fn build_loading_overlay_vertices(
+    screen_width: u32,
+    screen_height: u32,
+    completed: usize,
+    total: usize,
+) -> Vec<DebugVertex> {
+    let width = screen_width.max(1) as f32;
+    let height = screen_height.max(1) as f32;
+    let card_width = (width * 0.62).clamp(300.0, 520.0).min(width - 24.0).max(220.0);
+    let card_height = 176.0_f32.min(height - 24.0).max(132.0);
+    let left = (width - card_width) * 0.5;
+    let top = (height - card_height) * 0.5;
+    let mut vertices = Vec::with_capacity(5_000);
+
+    // Opaque background ensures a predictable frame even while the world is incomplete.
+    push_rect(&mut vertices, 0.0, 0.0, width, height, [0.025, 0.035, 0.052, 1.0]);
+    push_rect(&mut vertices, left, top, card_width, card_height, [0.075, 0.09, 0.115, 1.0]);
+    push_rect(&mut vertices, left + 3.0, top + 3.0, card_width - 6.0, card_height - 6.0,
+        [0.09, 0.105, 0.13, 1.0]);
+
+    let brand_scale = 3.0_f32;
+    let brand = "BOOKING";
+    let brand_width = brand.chars().count() as f32 * 6.0 * brand_scale;
+    draw_text_colored(&mut vertices, brand, width * 0.5 - brand_width * 0.5,
+        top + 26.0, brand_scale, [0.55, 0.78, 1.0, 1.0]);
+
+    let title = "CARREGANDO MUNDO";
+    let title_scale = 1.75_f32;
+    let title_width = title.chars().count() as f32 * 6.0 * title_scale;
+    draw_text_colored(&mut vertices, title, width * 0.5 - title_width * 0.5,
+        top + 62.0, title_scale, [0.94, 0.96, 1.0, 1.0]);
+
+    let subtitle = "PREPARANDO TERRENO";
+    let subtitle_scale = 1.1_f32;
+    let subtitle_width = subtitle.chars().count() as f32 * 6.0 * subtitle_scale;
+    draw_text_colored(&mut vertices, subtitle, width * 0.5 - subtitle_width * 0.5,
+        top + 88.0, subtitle_scale, [0.62, 0.68, 0.76, 1.0]);
+
+    let bar_width = card_width * 0.72;
+    let bar_left = width * 0.5 - bar_width * 0.5;
+    let bar_top = top + card_height - 35.0;
+    push_rect(&mut vertices, bar_left, bar_top, bar_width, 7.0, [0.18, 0.21, 0.26, 1.0]);
+    let ratio = (completed.min(total) as f32 / total.max(1) as f32).clamp(0.0, 1.0);
+    push_rect(&mut vertices, bar_left, bar_top, (bar_width * ratio).max(1.0), 7.0,
+        [0.32, 0.68, 0.95, 1.0]);
+    vertices
 }
 
 fn build_debug_overlay_vertices(
