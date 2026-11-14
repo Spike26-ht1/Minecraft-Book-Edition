@@ -145,20 +145,78 @@ fn enable_android_immersive_fullscreen(app: &AndroidApp) {
                 )?
                 .l()?;
 
-            const IMMERSIVE_FLAGS: i32 =
-                0x00000100 // SYSTEM_UI_FLAG_LAYOUT_STABLE
-                | 0x00000200 // SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | 0x00000400 // SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | 0x00000002 // SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | 0x00000004 // SYSTEM_UI_FLAG_FULLSCREEN
-                | 0x00001000; // SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            let sdk_int = env
+                .get_static_field(
+                    jni_str!("android/os/Build$VERSION"),
+                    jni_str!("SDK_INT"),
+                    jni_sig!("I"),
+                )?
+                .i()?;
 
-            env.call_method(
-                &decor_view,
-                jni_str!("setSystemUiVisibility"),
-                jni_sig!("(I)V"),
-                &[JValue::Int(IMMERSIVE_FLAGS)],
-            )?;
+            if sdk_int >= 30 {
+                // Android 15+ enforces edge-to-edge for target SDK 35 apps.
+                // Use the modern controller instead of deprecated View visibility flags.
+                let controller = env
+                    .call_method(
+                        &window,
+                        jni_str!("getInsetsController"),
+                        jni_sig!("()Landroid/view/WindowInsetsController;"),
+                        &[],
+                    )?
+                    .l()?;
+
+                if !controller.is_null() {
+                    let status_bars = env
+                        .call_static_method(
+                            jni_str!("android/view/WindowInsets$Type"),
+                            jni_str!("statusBars"),
+                            jni_sig!("()I"),
+                            &[],
+                        )?
+                        .i()?;
+                    let navigation_bars = env
+                        .call_static_method(
+                            jni_str!("android/view/WindowInsets$Type"),
+                            jni_str!("navigationBars"),
+                            jni_sig!("()I"),
+                            &[],
+                        )?
+                        .i()?;
+
+                    env.call_method(
+                        &controller,
+                        jni_str!("setSystemBarsBehavior"),
+                        jni_sig!("(I)V"),
+                        &[JValue::Int(2)], // BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    )?;
+                    env.call_method(
+                        &controller,
+                        jni_str!("hide"),
+                        jni_sig!("(I)V"),
+                        &[JValue::Int(status_bars | navigation_bars)],
+                    )?;
+                    log::info!("Android immersive fullscreen applied with WindowInsetsController");
+                } else {
+                    log::warn!("Android WindowInsetsController is unavailable; keeping window fullscreen theme");
+                }
+            } else {
+                // Legacy immersive mode for Android 8–10.
+                const IMMERSIVE_FLAGS: i32 =
+                    0x00000100 // SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | 0x00000200 // SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | 0x00000400 // SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | 0x00000002 // SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | 0x00000004 // SYSTEM_UI_FLAG_FULLSCREEN
+                    | 0x00001000; // SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+
+                env.call_method(
+                    &decor_view,
+                    jni_str!("setSystemUiVisibility"),
+                    jni_sig!("(I)V"),
+                    &[JValue::Int(IMMERSIVE_FLAGS)],
+                )?;
+                log::info!("Android legacy immersive fullscreen applied");
+            }
             Ok(())
         });
 
