@@ -64,6 +64,30 @@ impl CameraState {
     }
 }
 
+/// Renderer and frame-pacing options used by the mobile test settings menu.
+/// A zero FPS limit means uncapped rendering.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RenderSettings {
+    pub fps_limit: u16,
+    pub render_distance_chunks: u8,
+    pub menu_open: bool,
+}
+
+impl Default for RenderSettings {
+    fn default() -> Self {
+        Self {
+            fps_limit: 60,
+            render_distance_chunks: 4,
+            menu_open: false,
+        }
+    }
+}
+
+impl RenderSettings {
+    pub const FPS_OPTIONS: [u16; 4] = [30, 60, 90, 0];
+    pub const DISTANCE_OPTIONS: [u8; 5] = [2, 4, 6, 8, 12];
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct MobileControlsState {
     /// Horizontal movement: left=-1, right=1.
@@ -102,6 +126,11 @@ pub struct MobileControlsLayout {
     pub break_block: TouchRect,
     pub place_block: TouchRect,
     pub debug: TouchRect,
+    pub settings: TouchRect,
+    pub settings_panel: TouchRect,
+    pub settings_close: TouchRect,
+    pub fps_options: [TouchRect; 4],
+    pub distance_options: [TouchRect; 5],
 }
 
 impl MobileControlsLayout {
@@ -123,6 +152,32 @@ impl MobileControlsLayout {
             (width * 0.15).clamp(joystick_radius + 12.0, width * 0.34),
             height - bottom_safe - joystick_radius,
         ];
+        let top_inset = (height * 0.07).clamp(20.0, 44.0);
+        let panel_width = (width - 40.0).min(680.0);
+        let panel_height = (height - 72.0).min(500.0);
+        let panel_x = (width - panel_width) * 0.5;
+        let panel_y = (height - panel_height) * 0.5;
+        let panel = TouchRect {
+            x: panel_x, y: panel_y, width: panel_width, height: panel_height,
+        };
+        let menu_gap = 10.0;
+        let fps_width = (panel_width - 40.0 - menu_gap * 3.0) / 4.0;
+        let distance_width = (panel_width - 40.0 - menu_gap * 4.0) / 5.0;
+        let fps_y = panel_y + panel_height * 0.37;
+        let distance_y = panel_y + panel_height * 0.69;
+        let fps_options = std::array::from_fn(|index| TouchRect {
+            x: panel_x + 20.0 + index as f32 * (fps_width + menu_gap),
+            y: fps_y,
+            width: fps_width,
+            height: 58.0,
+        });
+        let distance_options = std::array::from_fn(|index| TouchRect {
+            x: panel_x + 20.0 + index as f32 * (distance_width + menu_gap),
+            y: distance_y,
+            width: distance_width,
+            height: 58.0,
+        });
+
         Self {
             joystick_center,
             joystick_radius,
@@ -132,11 +187,25 @@ impl MobileControlsLayout {
             place_block: rect(right_x + button_size + gap, top_y + button_size + gap),
             debug: TouchRect {
                 x: width - side_margin - 64.0,
-                // Extra top inset keeps the debug target below Android's status bar.
-                y: (height * 0.15).clamp(96.0, 140.0),
+                y: top_inset,
                 width: 56.0,
                 height: 34.0,
             },
+            settings: TouchRect {
+                x: width - side_margin - 128.0,
+                y: top_inset,
+                width: 56.0,
+                height: 34.0,
+            },
+            settings_panel: panel,
+            settings_close: TouchRect {
+                x: panel_x + panel_width - 82.0,
+                y: panel_y + 18.0,
+                width: 64.0,
+                height: 42.0,
+            },
+            fps_options,
+            distance_options,
         }
     }
 
@@ -152,6 +221,7 @@ pub struct RenderFrame {
     pub clear_color: ClearColor,
     pub camera: CameraState,
     pub mobile_controls: MobileControlsState,
+    pub settings: RenderSettings,
 }
 
 impl Default for RenderFrame {
@@ -160,6 +230,7 @@ impl Default for RenderFrame {
             clear_color: ClearColor::SKY,
             camera: CameraState::default(),
             mobile_controls: MobileControlsState::default(),
+            settings: RenderSettings::default(),
         }
     }
 }
@@ -228,9 +299,12 @@ mod mobile_controls_tests {
             let layout = MobileControlsLayout::new(width, height);
             let bounds = [
                 layout.jump, layout.sprint, layout.break_block,
-                layout.place_block, layout.debug,
+                layout.place_block, layout.debug, layout.settings,
+                layout.settings_panel, layout.settings_close,
             ];
-            for rect in bounds {
+            let mut option_bounds = Vec::from(layout.fps_options);
+            option_bounds.extend(layout.distance_options);
+            for rect in bounds.into_iter().chain(option_bounds) {
                 assert!(rect.x >= 0.0 && rect.y >= 0.0);
                 assert!(rect.x + rect.width <= width as f32);
                 assert!(rect.y + rect.height <= height as f32);
@@ -252,6 +326,17 @@ mod mobile_controls_tests {
                 let overlap_y = a.y < b.y + b.height && a.y + a.height > b.y;
                 assert!(!(overlap_x && overlap_y));
             }
+        }
+    }
+
+    #[test]
+    fn settings_option_targets_fit_inside_the_settings_panel() {
+        let layout = MobileControlsLayout::new(1536, 864);
+        for rect in layout.fps_options.into_iter().chain(layout.distance_options) {
+            assert!(rect.x >= layout.settings_panel.x);
+            assert!(rect.y >= layout.settings_panel.y);
+            assert!(rect.x + rect.width <= layout.settings_panel.x + layout.settings_panel.width);
+            assert!(rect.y + rect.height <= layout.settings_panel.y + layout.settings_panel.height);
         }
     }
 
