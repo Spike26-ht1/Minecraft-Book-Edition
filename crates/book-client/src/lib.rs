@@ -2,7 +2,7 @@
 
 use booking_engine::{BookingEngine, PlayerController, PlayerInput};
 use book_core::BlockId;
-use book_renderer_api::{RenderFrame, RendererBackend};
+use book_renderer_api::{MobileControlsLayout, MobileControlsState, RenderFrame, RendererBackend};
 use book_renderer_opengl::OpenGlRenderer;
 use glium::winit::event::{ElementState, Event, MouseButton, TouchPhase, WindowEvent};
 use glium::winit::event_loop::ControlFlow;
@@ -17,6 +17,49 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const PACKAGE_ID: &str = "com.spike26.minecraftbookedition";
 const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ActiveTouch {
+    Joystick,
+    Jump,
+    Sprint,
+    Break,
+    Place,
+    Debug,
+    Look,
+}
+
+fn joystick_axis(point: [f64; 2], layout: MobileControlsLayout) -> [f32; 2] {
+    let dx = point[0] as f32 - layout.joystick_center[0];
+    let dy = point[1] as f32 - layout.joystick_center[1];
+    let radius = layout.joystick_radius.max(1.0);
+    let mut strafe = (dx / radius).clamp(-1.0, 1.0);
+    let mut forward = (-dy / radius).clamp(-1.0, 1.0);
+    let magnitude = (strafe * strafe + forward * forward).sqrt();
+    if magnitude > 1.0 {
+        strafe /= magnitude;
+        forward /= magnitude;
+    }
+    [strafe, forward]
+}
+
+fn perform_touch_block_action(
+    engine: &mut BookingEngine,
+    player: &PlayerController,
+    place: bool,
+) -> bool {
+    let Some(hit) = engine.raycast_blocks(player.camera_position(), player.forward(), 6.0) else {
+        return false;
+    };
+    if place {
+        if player.intersects_block(hit.adjacent) {
+            return false;
+        }
+        engine.place_block_at(hit.adjacent, BlockId(3))
+    } else {
+        engine.break_block_at(hit.position)
+    }
+}
 
 fn save_world_if_available(engine: &BookingEngine, path: Option<&Path>) {
     let Some(path) = path else { return; };
@@ -243,6 +286,8 @@ pub fn android_main(app: AndroidApp) {
     let mut active_touches: HashMap<u64, (f64, f64)> = HashMap::new();
     let mut touch_start_positions: HashMap<u64, (f64, f64)> = HashMap::new();
     let mut touch_start_times: HashMap<u64, Instant> = HashMap::new();
+    let mut touch_roles: HashMap<u64, ActiveTouch> = HashMap::new();
+    let mut jump_queued = false;
     let mut next_frame_deadline: Option<Instant> = None;
     let mut last_simulation_tick = Instant::now();
     let spawn_position = player.position();
@@ -372,83 +417,156 @@ pub fn android_main(app: AndroidApp) {
                             active_touches.insert(touch_id, location);
                             touch_start_positions.insert(touch_id, location);
                             touch_start_times.insert(touch_id, Instant::now());
-                            if let Some((window, renderer)) = renderer_state.as_mut() {
-                                let size = window.inner_size();
-                                // The DBG control is bottom-right, away from Android's
-                                // status icons and gesture-navigation handle.
-                                if location.0 >= size.width.saturating_sub(112) as f64
-                                    && location.1 >= size.height.saturating_sub(104) as f64
-                                    && location.1 <= size.height.saturating_sub(20) as f64
-                                {
-                                    renderer.toggle_debug();
-                                    window.request_redraw();
+
+                            let size = renderer_state
+                                .as_ref()
+                                .map(|(window, _)| window.inner_size());
+                            let layout = size
+                                .map(|size| MobileControlsLayout::new(size.width, size.height));
+
+                            let role = if let Some(layout) = layout {
+                                let point = [location.0 as f32, location.1 as f32];
+                                if layout.debug.contains(point) {
+                                    if let Some((window, renderer)) = renderer_state.as_mut() {
+                                        renderer.toggle_debug();
+                                        window.request_redraw();
+                                    }
+                                    ActiveTouch::Debug
+                                } else if layout.joystick_contains(point) {
+                                    let axis = joystick_axis(location, layout);
+                                    frame.mobile_controls.strafe = axis[0];
+                                    frame.mobile_controls.forward = axis[1];
+                                    ActiveTouch::Joystick
+                                } else if layout.jump.contains(point) {
+                                    frame.mobile_controls.jump_pressed = true;
+                                    jump_queued = true;
+                                    ActiveTouch::Jump
+                                } else if layout.sprint.contains(point) {
+                                    frame.mobile_controls.sprint_pressed = true;
+                                    ActiveTouch::Sprint
+                                } else if layout.break_block.contains(point) {
+                                    frame.mobile_controls.break_pressed = true;
+                                    if perform_touch_block_action(&mut engine, &player, false) {
+                                        if let Some((window, renderer)) = renderer_state.as_mut() {
+                                            if let Err(error) = renderer.sync_world(&engine) {
+                                                log::error!("Renderer sync after mobile mining failed: {error}");
+                                            }
+                                            window.request_redraw();
+                                        }
+                                        if world_save_enabled {
+                                            save_world_if_available(&engine, world_save_path.as_deref());
+                                        }
+                                    }
+                                    ActiveTouch::Break
+                                } else if layout.place_block.contains(point) {
+                                    frame.mobile_controls.place_pressed = true;
+                                    if perform_touch_block_action(&mut engine, &player, true) {
+                                        if let Some((window, renderer)) = renderer_state.as_mut() {
+                                            if let Err(error) = renderer.sync_world(&engine) {
+                                                log::error!("Renderer sync after mobile placement failed: {error}");
+                                            }
+                                            window.request_redraw();
+                                        }
+                                        if world_save_enabled {
+                                            save_world_if_available(&engine, world_save_path.as_deref());
+                                        }
+                                    }
+                                    ActiveTouch::Place
+                                } else {
+                                    ActiveTouch::Look
                                 }
+                            } else {
+                                ActiveTouch::Look
+                            };
+
+                            touch_roles.insert(touch_id, role);
+                            if let Some((window, _)) = renderer_state.as_ref() {
+                                window.request_redraw();
                             }
                         }
                         TouchPhase::Moved => {
-                            if let Some(previous) = active_touches.insert(touch_id, location) {
-                                player.look(
-                                    ((location.0 - previous.0) as f32) * 0.004,
-                                    -((location.1 - previous.1) as f32) * 0.004,
-                                );
-                                frame.camera.position = player.camera_position();
-                                frame.camera.yaw = player.yaw();
-                                frame.camera.pitch = player.pitch();
-                                if let Some((window, _)) = renderer_state.as_ref() {
-                                    window.request_redraw();
+                            let role = touch_roles.get(&touch_id).copied().unwrap_or(ActiveTouch::Look);
+                            active_touches.insert(touch_id, location);
+                            match role {
+                                ActiveTouch::Joystick => {
+                                    if let Some((window, _)) = renderer_state.as_ref() {
+                                        let size = window.inner_size();
+                                        let layout = MobileControlsLayout::new(size.width, size.height);
+                                        let axis = joystick_axis(location, layout);
+                                        frame.mobile_controls.strafe = axis[0];
+                                        frame.mobile_controls.forward = axis[1];
+                                        window.request_redraw();
+                                    }
                                 }
+                                ActiveTouch::Look => {
+                                    if let Some(previous) = touch_start_positions.get_mut(&touch_id) {
+                                        player.look(
+                                            ((location.0 - previous.0) as f32) * 0.004,
+                                            -((location.1 - previous.1) as f32) * 0.004,
+                                        );
+                                        *previous = location;
+                                        frame.camera.position = player.camera_position();
+                                        frame.camera.yaw = player.yaw();
+                                        frame.camera.pitch = player.pitch();
+                                        if let Some((window, _)) = renderer_state.as_ref() {
+                                            window.request_redraw();
+                                        }
+                                    }
+                                }
+                                _ => {}
                             }
                         }
-                        TouchPhase::Ended => {
+                        TouchPhase::Ended | TouchPhase::Cancelled => {
                             active_touches.remove(&touch_id);
-                            if let Some(start) = touch_start_positions.remove(&touch_id) {
-                                let held_for = touch_start_times.remove(&touch_id)
+                            touch_start_positions.remove(&touch_id);
+                            touch_start_times.remove(&touch_id);
+                            let role = touch_roles.remove(&touch_id).unwrap_or(ActiveTouch::Look);
+                            match role {
+                                ActiveTouch::Joystick => {
+                                    frame.mobile_controls.strafe = 0.0;
+                                    frame.mobile_controls.forward = 0.0;
+                                }
+                                ActiveTouch::Jump => frame.mobile_controls.jump_pressed = false,
+                                ActiveTouch::Sprint => frame.mobile_controls.sprint_pressed = false,
+                                ActiveTouch::Break => frame.mobile_controls.break_pressed = false,
+                                ActiveTouch::Place => frame.mobile_controls.place_pressed = false,
+                                ActiveTouch::Debug | ActiveTouch::Look => {}
+                            }
+                            if let Some((window, _)) = renderer_state.as_ref() {
+                                window.request_redraw();
+                            }
+
+                            // Keep the original world-surface gesture as a fallback:
+                            // short taps mine, while a long press places a block.
+                            if touch.phase == TouchPhase::Ended && role == ActiveTouch::Look {
+                                let started = touch_start_times.get(&touch_id).copied();
+                                let held_for = started
                                     .map(|started| started.elapsed())
                                     .unwrap_or_default();
-                                let dx = location.0 - start.0;
-                                let dy = location.1 - start.1;
-                                let is_tap = dx * dx + dy * dy < 144.0;
-                                let is_debug_area = renderer_state.as_ref()
-                                    .map(|(window, _)| {
-                                        let size = window.inner_size();
-                                        start.0 >= size.width.saturating_sub(112) as f64
-                                            && start.1 >= size.height.saturating_sub(104) as f64
-                                            && start.1 <= size.height.saturating_sub(20) as f64
-                                    })
-                                    .unwrap_or(false);
-                                if is_tap && !is_debug_area {
-                                    if let Some(hit) = engine.raycast_blocks(
-                                        player.camera_position(), player.forward(), 6.0,
-                                    ) {
-                                        let changed = if held_for >= Duration::from_millis(350) {
-                                            if player.intersects_block(hit.adjacent) {
-                                                false
-                                            } else {
-                                                engine.place_block_at(hit.adjacent, BlockId(3))
-                                            }
-                                        } else {
-                                            engine.break_block_at(hit.position)
-                                        };
+                                let start = touch_start_positions.get(&touch_id).copied();
+                                if let Some(start) = start {
+                                    let dx = location.0 - start.0;
+                                    let dy = location.1 - start.1;
+                                    if dx * dx + dy * dy < 144.0 {
+                                        let changed = perform_touch_block_action(
+                                            &mut engine,
+                                            &player,
+                                            held_for >= Duration::from_millis(350),
+                                        );
                                         if changed {
                                             if let Some((window, renderer)) = renderer_state.as_mut() {
                                                 if let Err(error) = renderer.sync_world(&engine) {
-                                                    log::error!("World mesh sync after touch block interaction failed: {error}");
+                                                    log::error!("Renderer sync after world tap failed: {error}");
                                                 }
                                                 window.request_redraw();
                                             }
                                             if world_save_enabled {
                                                 save_world_if_available(&engine, world_save_path.as_deref());
-                                                save_player_if_available(&player, player_save_path.as_deref());
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
-                        TouchPhase::Cancelled => {
-                            active_touches.remove(&touch_id);
-                            touch_start_positions.remove(&touch_id);
-                            touch_start_times.remove(&touch_id);
                         }
                     }
                 }
@@ -474,17 +592,22 @@ pub fn android_main(app: AndroidApp) {
                 let delta_seconds = now.duration_since(last_simulation_tick).as_secs_f32();
                 last_simulation_tick = now;
 
-                let forward = (pressed_keys.contains(&KeyCode::KeyW) as i8
+                let keyboard_forward = (pressed_keys.contains(&KeyCode::KeyW) as i8
                     - pressed_keys.contains(&KeyCode::KeyS) as i8) as f32;
-                let strafe = (pressed_keys.contains(&KeyCode::KeyD) as i8
+                let keyboard_strafe = (pressed_keys.contains(&KeyCode::KeyD) as i8
                     - pressed_keys.contains(&KeyCode::KeyA) as i8) as f32;
+                let forward = (keyboard_forward + frame.mobile_controls.forward).clamp(-1.0, 1.0);
+                let strafe = (keyboard_strafe + frame.mobile_controls.strafe).clamp(-1.0, 1.0);
+                let jump = pressed_keys.contains(&KeyCode::Space) || jump_queued;
+                jump_queued = false;
                 player.update(
                     &engine,
                     PlayerInput {
                         forward,
                         strafe,
-                        jump: pressed_keys.contains(&KeyCode::Space),
-                        sprint: pressed_keys.contains(&KeyCode::ShiftLeft),
+                        jump,
+                        sprint: pressed_keys.contains(&KeyCode::ShiftLeft)
+                            || frame.mobile_controls.sprint_pressed,
                     },
                     delta_seconds,
                 );
