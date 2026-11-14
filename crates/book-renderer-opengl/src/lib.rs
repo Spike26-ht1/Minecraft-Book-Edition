@@ -1,7 +1,7 @@
 use book_assets::{TextureAtlas, TextureImage};
 use booking_engine::BookingEngine;
 use book_core::BlockId;
-use book_renderer_api::{CameraState, GraphicsApi, RendererBackend, RendererError, RendererInfo, RenderFrame};
+use book_renderer_api::{CameraState, GraphicsApi, MobileControlsLayout, MobileControlsState, RendererBackend, RendererError, RendererInfo, RenderFrame};
 #[cfg(not(target_os = "android"))]
 use glium::backend::glutin::SimpleWindowBuilder;
 #[cfg(target_os = "android")]
@@ -368,28 +368,45 @@ impl OpenGlRenderer {
     }
 
     #[cfg(target_os = "android")]
-    fn draw_debug_button(&self, target: &mut glium::Frame) -> Result<(), RendererError> {
+    fn draw_mobile_controls(
+        &self,
+        target: &mut glium::Frame,
+        state: MobileControlsState,
+    ) -> Result<(), RendererError> {
         let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
-        // Keep the control clear of Android's status bar and gesture-navigation
-        // area. The bottom-right inset is intentionally conservative on phones.
-        let x = screen_width.saturating_sub(96) as f32;
-        let y = screen_height.saturating_sub(88) as f32;
-        let mut vertices = Vec::new();
-        push_rect(&mut vertices, x, y, 76.0, 40.0, [0.015, 0.02, 0.025, 0.88]);
-        for (index, character) in "DBG".chars().enumerate() {
-            draw_character(&mut vertices, character, x + 12.0 + index as f32 * 16.0, y + 11.0, 2.0);
-        }
+        let layout = MobileControlsLayout::new(screen_width, screen_height);
+        let mut vertices = Vec::with_capacity(2_400);
+
+        // Left virtual joystick: pixel-stepped stone rim and responsive thumb.
+        push_pixel_disc(
+            &mut vertices,
+            layout.joystick_center,
+            layout.joystick_radius,
+            false,
+            [state.strafe, state.forward],
+        );
+
+        push_mobile_button(&mut vertices, layout.jump, "PULO", state.jump_pressed);
+        push_mobile_button(&mut vertices, layout.sprint, "CORRER", state.sprint_pressed);
+        push_mobile_button(&mut vertices, layout.break_block, "MINAR", state.break_pressed);
+        push_mobile_button(&mut vertices, layout.place_block, "COLOCAR", state.place_pressed);
+        push_mobile_button(&mut vertices, layout.debug, "DBG", self.debug_visible);
+
         let buffer = VertexBuffer::new(&self.display, &vertices)
-            .map_err(|error| RendererError::new(format!("Debug button buffer: {error}")))?;
-        let params = DrawParameters { blend: Blend::alpha_blending(), ..DrawParameters::default() };
+            .map_err(|error| RendererError::new(format!("Mobile controls buffer: {error}")))?;
+        let params = DrawParameters {
+            blend: Blend::alpha_blending(),
+            ..DrawParameters::default()
+        };
         target.draw(
             &buffer,
             NoIndices(glium::index::PrimitiveType::TrianglesList),
             &self.debug_program,
             &uniform! { u_screen: [screen_width as f32, screen_height as f32] },
             &params,
-        ).map_err(|error| RendererError::new(format!("Debug button draw: {error}")))
+        ).map_err(|error| RendererError::new(format!("Mobile controls draw: {error}")))
     }
+
 }
 
 impl RendererBackend for OpenGlRenderer {
@@ -450,7 +467,7 @@ impl RendererBackend for OpenGlRenderer {
         }
         if self.debug_visible { self.draw_debug_overlay(&mut target)?; }
         #[cfg(target_os = "android")]
-        self.draw_debug_button(&mut target)?;
+        self.draw_mobile_controls(&mut target, frame.mobile_controls)?;
         target.finish().map_err(|error| RendererError::new(format!("OpenGL present: {error}")))?;
         #[cfg(target_os = "android")]
         if !self.first_frame_logged {
@@ -517,6 +534,126 @@ mod camera_tests {
         }
     }
 }
+
+fn push_pixel_disc(
+    vertices: &mut Vec<DebugVertex>,
+    center: [f32; 2],
+    radius: f32,
+    pressed: bool,
+    movement: [f32; 2],
+) {
+    let cells = 13_i32;
+    let cell = radius * 2.0 / cells as f32;
+    for y in 0..cells {
+        for x in 0..cells {
+            let nx = (x as f32 + 0.5) / cells as f32 * 2.0 - 1.0;
+            let ny = (y as f32 + 0.5) / cells as f32 * 2.0 - 1.0;
+            let distance = (nx * nx + ny * ny).sqrt();
+            if distance > 1.0 { continue; }
+            let shade = ((x * 7 + y * 11 + (x * y) % 5) % 4) as f32;
+            let color = if distance > 0.78 {
+                [0.08 + shade * 0.018, 0.09 + shade * 0.018, 0.10 + shade * 0.018, 0.78]
+            } else {
+                [0.16 + shade * 0.018, 0.18 + shade * 0.018, 0.20 + shade * 0.018, 0.48]
+            };
+            push_rect(
+                vertices,
+                center[0] - radius + x as f32 * cell,
+                center[1] - radius + y as f32 * cell,
+                cell + 0.5,
+                cell + 0.5,
+                color,
+            );
+        }
+    }
+
+    let thumb_center = [
+        center[0] + movement[0].clamp(-1.0, 1.0) * radius * 0.48,
+        center[1] - movement[1].clamp(-1.0, 1.0) * radius * 0.48,
+    ];
+    let thumb_radius = radius * 0.38;
+    let thumb_cells = 9_i32;
+    let thumb_cell = thumb_radius * 2.0 / thumb_cells as f32;
+    for y in 0..thumb_cells {
+        for x in 0..thumb_cells {
+            let nx = (x as f32 + 0.5) / thumb_cells as f32 * 2.0 - 1.0;
+            let ny = (y as f32 + 0.5) / thumb_cells as f32 * 2.0 - 1.0;
+            if nx * nx + ny * ny > 1.0 { continue; }
+            let shade = ((x * 3 + y * 5) % 3) as f32 * 0.035;
+            let base = if pressed { 0.48 } else { 0.34 };
+            push_rect(
+                vertices,
+                thumb_center[0] - thumb_radius + x as f32 * thumb_cell,
+                thumb_center[1] - thumb_radius + y as f32 * thumb_cell,
+                thumb_cell + 0.5,
+                thumb_cell + 0.5,
+                [base + shade, base + shade, base + shade, 0.94],
+            );
+        }
+    }
+}
+
+fn push_mobile_button(
+    vertices: &mut Vec<DebugVertex>,
+    rect: MobileControlsLayoutRect,
+    label: &str,
+    pressed: bool,
+) {
+    let x = rect.x;
+    let y = rect.y;
+    let width = rect.width;
+    let height = rect.height;
+    let outer = if pressed { [0.04, 0.09, 0.035, 0.96] } else { [0.025, 0.03, 0.035, 0.92] };
+    let top = if pressed { [0.62, 0.72, 0.40, 0.98] } else { [0.58, 0.62, 0.66, 0.96] };
+    push_rect(vertices, x, y, width, height, outer);
+    push_rect(vertices, x + 3.0, y + 3.0, width - 6.0, height - 6.0, top);
+    push_rect(
+        vertices, x + 5.0, y + 5.0, width - 10.0, height - 10.0,
+        if pressed { [0.20, 0.34, 0.13, 0.98] } else { [0.23, 0.25, 0.27, 0.98] },
+    );
+
+    // Small irregular stone pixels give the temporary HUD a Bedrock-like
+    // block texture without embedding Mojang's copyrighted UI sprites.
+    let tile = 5.0_f32;
+    let shades = [
+        [0.32, 0.34, 0.36, 0.86],
+        [0.39, 0.41, 0.43, 0.86],
+        [0.27, 0.29, 0.31, 0.86],
+        [0.44, 0.46, 0.48, 0.86],
+        [0.35, 0.37, 0.39, 0.86],
+    ];
+    let mut row = 0_i32;
+    let mut py = y + 7.0;
+    while py < y + height - 7.0 {
+        let mut column = 0_i32;
+        let mut px = x + 7.0;
+        while px < x + width - 7.0 {
+            let index = ((column * 7 + row * 11 + (column * row) % 5).unsigned_abs() as usize) % shades.len();
+            let mut color = shades[index];
+            if pressed {
+                color[0] = (color[0] * 0.82).min(1.0);
+                color[1] = (color[1] * 1.08).min(1.0);
+            }
+            push_rect(vertices, px, py, tile - 0.5, tile - 0.5, color);
+            px += tile;
+            column += 1;
+        }
+        py += tile;
+        row += 1;
+    }
+
+    let scale = ((width - 12.0) / (label.chars().count() as f32 * 6.0)).clamp(0.85, 1.6);
+    let label_width = label.chars().count() as f32 * 6.0 * scale;
+    let mut text_x = x + (width - label_width) * 0.5;
+    let text_y = y + (height - 7.0 * scale) * 0.5;
+    for character in label.chars() {
+        draw_character(vertices, character, text_x, text_y, scale);
+        text_x += 6.0 * scale;
+    }
+}
+
+/// Local alias keeps the helper signature compact while using the shared hit layout.
+type MobileControlsLayoutRect = book_renderer_api::TouchRect;
 
 fn push_rect(vertices: &mut Vec<DebugVertex>, x: f32, y: f32, width: f32, height: f32, color: [f32; 4]) {
     let p0 = [x, y];
