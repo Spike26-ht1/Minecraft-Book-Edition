@@ -7,6 +7,9 @@
 mod player;
 pub use player::{BlockHit, PlayerController, PlayerInput};
 
+mod save;
+pub use save::WorldSaveError;
+
 use book_core::{AtlasTile, BlockDefinition, BlockId, BlockRegistry};
 use book_meshing::{mesh_chunk_section, ChunkMesh};
 use book_world::{ChunkColumn, ChunkManager, ChunkPos, SECTION_EDGE};
