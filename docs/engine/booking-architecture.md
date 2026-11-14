@@ -30,8 +30,10 @@ World persistence uses a versioned Booking binary container. Each vertical
 section stores its palette, packed indices, and validated dimensions. The file
 has a checksum and is written through a temporary sibling file before replace.
 The Android client loads the saved world at startup, saves after block edits,
-and saves again when the activity is suspended or the event loop exits. This
-is a project-specific format and is not compatible with Bedrock world files.
+and saves again when the activity is suspended or the event loop exits. Player
+position and view direction are stored separately and validated against the
+loaded world before restoration. These are project-specific formats and are
+not compatible with Bedrock world files.
 
 ## Graphics targets
 
