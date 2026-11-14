@@ -230,10 +230,11 @@ pub struct OpenGlRenderer {
     visible_chunk_count: usize,
     debug_overlay_buffer: VertexBuffer<DebugVertex>,
     debug_overlay_vertices: Vec<DebugVertex>,
+    debug_overlay_updated: Instant,
     #[cfg(target_os = "android")]
     mobile_controls_buffer: VertexBuffer<DebugVertex>,
     #[cfg(target_os = "android")]
-    mobile_controls_vertices: Vec<DebugVertex>,
+    mobile_controls_signature: Option<(u32, u32, MobileControlsState, RenderSettings, bool)>,
     #[cfg(target_os = "android")]
     first_frame_logged: bool,
 }
@@ -298,24 +299,32 @@ impl OpenGlRenderer {
             build_debug_overlay_vertices(screen_width, screen_height, 0, 0.0, 0, 0);
         let debug_overlay_buffer = VertexBuffer::dynamic(&display, &debug_overlay_vertices)
             .map_err(|error| RendererError::new(format!("Debug overlay buffer allocation: {error}")))?;
+        let now = Instant::now();
 
         #[cfg(target_os = "android")]
-        let (mobile_controls_buffer, mobile_controls_vertices) = {
+        let (mobile_controls_buffer, mobile_controls_signature) = {
             let layout = MobileControlsLayout::new(screen_width, screen_height);
-            let mut vertices = build_mobile_controls_vertices(
+            let initial_state = MobileControlsState::default();
+            let initial_settings = RenderSettings::default();
+            let vertices = build_mobile_controls_vertices(
                 layout,
-                MobileControlsState::default(),
-                RenderSettings::default(),
+                initial_state,
+                initial_settings,
                 false,
             );
             let buffer = VertexBuffer::dynamic(&display, &vertices)
                 .map_err(|error| RendererError::new(format!("Mobile controls buffer allocation: {error}")))?;
-            (buffer, vertices)
+            (buffer, Some((
+                screen_width,
+                screen_height,
+                initial_state,
+                initial_settings,
+                false,
+            )))
         };
 
         #[cfg(target_os = "android")]
         record_android_diagnostic("Renderer: GPU resources and persistent HUD buffers are ready");
-        let now = Instant::now();
         Ok((window, Self {
             display, chunk_meshes, program, atlas, debug_program,
             last_frame: now, fps_window_started: now,
@@ -323,10 +332,11 @@ impl OpenGlRenderer {
             visible_chunk_count: 0,
             debug_overlay_buffer,
             debug_overlay_vertices,
+            debug_overlay_updated: now,
             #[cfg(target_os = "android")]
             mobile_controls_buffer,
             #[cfg(target_os = "android")]
-            mobile_controls_vertices,
+            mobile_controls_signature,
             #[cfg(target_os = "android")]
             first_frame_logged: false,
         }))
@@ -421,20 +431,23 @@ impl OpenGlRenderer {
     fn draw_debug_overlay(&mut self, target: &mut glium::Frame) -> Result<(), RendererError> {
         let vertex_count: usize = self.chunk_meshes.iter().map(|mesh| mesh.vertices.len()).sum();
         let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
-        self.debug_overlay_vertices.clear();
-        self.debug_overlay_vertices.extend(build_debug_overlay_vertices(
-            screen_width,
-            screen_height,
-            self.fps,
-            self.last_frame_ms,
-            self.visible_chunk_count,
-            vertex_count,
-        ));
+        if self.debug_overlay_updated.elapsed() >= Duration::from_millis(250) {
+            self.debug_overlay_vertices.clear();
+            self.debug_overlay_vertices.extend(build_debug_overlay_vertices(
+                screen_width,
+                screen_height,
+                self.fps,
+                self.last_frame_ms,
+                self.visible_chunk_count,
+                vertex_count,
+            ));
 
-        if self.debug_overlay_vertices.len() != self.debug_overlay_buffer.len() {
-            return Err(RendererError::new("Debug overlay vertex count changed unexpectedly"));
+            if self.debug_overlay_vertices.len() != self.debug_overlay_buffer.len() {
+                return Err(RendererError::new("Debug overlay vertex count changed unexpectedly"));
+            }
+            self.debug_overlay_buffer.write(&self.debug_overlay_vertices);
+            self.debug_overlay_updated = Instant::now();
         }
-        self.debug_overlay_buffer.write(&self.debug_overlay_vertices);
 
         let params = DrawParameters {
             blend: Blend::alpha_blending(),
@@ -457,16 +470,20 @@ impl OpenGlRenderer {
         settings: RenderSettings,
     ) -> Result<(), RendererError> {
         let (screen_width, screen_height) = self.display.get_framebuffer_dimensions();
-        let layout = MobileControlsLayout::new(screen_width, screen_height);
-        self.mobile_controls_vertices.clear();
-        self.mobile_controls_vertices.extend(build_mobile_controls_vertices(
-            layout, state, settings, self.debug_visible,
-        ));
-
-        if self.mobile_controls_vertices.len() != self.mobile_controls_buffer.len() {
-            return Err(RendererError::new("Mobile HUD vertex count changed unexpectedly"));
+        let signature = (
+            screen_width, screen_height, state, settings, self.debug_visible,
+        );
+        if self.mobile_controls_signature != Some(signature) {
+            let layout = MobileControlsLayout::new(screen_width, screen_height);
+            let vertices = build_mobile_controls_vertices(
+                layout, state, settings, self.debug_visible,
+            );
+            if vertices.len() != self.mobile_controls_buffer.len() {
+                return Err(RendererError::new("Mobile HUD vertex count changed unexpectedly"));
+            }
+            self.mobile_controls_buffer.write(&vertices);
+            self.mobile_controls_signature = Some(signature);
         }
-        self.mobile_controls_buffer.write(&self.mobile_controls_vertices);
 
         let params = DrawParameters {
             blend: Blend::alpha_blending(),
