@@ -132,7 +132,8 @@ impl MobileControlsLayout {
             place_block: rect(right_x + button_size + gap, top_y + button_size + gap),
             debug: TouchRect {
                 x: width - side_margin - 64.0,
-                y: (height * 0.10).clamp(60.0, 96.0),
+                // Extra top inset keeps the debug target below Android's status bar.
+                y: (height * 0.15).clamp(96.0, 140.0),
                 width: 56.0,
                 height: 34.0,
             },
