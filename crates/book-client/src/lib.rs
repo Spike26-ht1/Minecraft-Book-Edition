@@ -98,6 +98,7 @@ fn initialize_android_logging() {
     ));
 }
 
+#[allow(unsafe_code)]
 fn enable_android_immersive_fullscreen(app: &AndroidApp) {
     app.set_window_flags(
         WindowManagerFlags::FULLSCREEN | WindowManagerFlags::KEEP_SCREEN_ON,
