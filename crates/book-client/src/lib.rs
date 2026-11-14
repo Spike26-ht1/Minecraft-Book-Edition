@@ -2,7 +2,7 @@
 
 use booking_engine::{BookingEngine, PlayerController, PlayerInput};
 use book_core::BlockId;
-use book_renderer_api::{MobileControlsLayout, MobileControlsState, RenderFrame, RendererBackend};
+use book_renderer_api::{MobileControlsLayout, MobileControlsState, RenderFrame, RenderSettings, RendererBackend};
 use book_renderer_opengl::OpenGlRenderer;
 use glium::winit::event::{ElementState, Event, MouseButton, TouchPhase, WindowEvent};
 use glium::winit::event_loop::ControlFlow;
@@ -17,7 +17,13 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const PACKAGE_ID: &str = "com.spike26.minecraftbookedition";
-const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
+fn frame_interval(fps_limit: u16) -> Option<Duration> {
+    if fps_limit == 0 {
+        None
+    } else {
+        Some(Duration::from_nanos(1_000_000_000_u64 / fps_limit as u64))
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ActiveTouch {
@@ -27,6 +33,7 @@ enum ActiveTouch {
     Break,
     Place,
     Debug,
+    Settings,
     Look,
 }
 
@@ -387,9 +394,14 @@ pub fn android_main(app: AndroidApp) {
             }
             if let Some((window, _)) = renderer_state.as_ref() {
                 window.request_redraw();
-                let deadline = Instant::now() + FRAME_INTERVAL;
-                next_frame_deadline = Some(deadline);
-                active_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+                if let Some(interval) = frame_interval(frame.settings.fps_limit) {
+                    let deadline = Instant::now() + interval;
+                    next_frame_deadline = Some(deadline);
+                    active_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+                } else {
+                    next_frame_deadline = None;
+                    active_loop.set_control_flow(ControlFlow::Poll);
+                }
             } else {
                 next_frame_deadline = None;
                 active_loop.set_control_flow(ControlFlow::Wait);
@@ -504,7 +516,31 @@ pub fn android_main(app: AndroidApp) {
 
                             let role = if let Some(layout) = layout {
                                 let point = [location.0 as f32, location.1 as f32];
-                                if layout.debug.contains(point) {
+                                if layout.settings.contains(point) {
+                                    frame.settings.menu_open = !frame.settings.menu_open;
+                                    frame.mobile_controls = MobileControlsState::default();
+                                    if let Some((window, _)) = renderer_state.as_ref() {
+                                        window.request_redraw();
+                                    }
+                                    ActiveTouch::Settings
+                                } else if frame.settings.menu_open {
+                                    if layout.settings_close.contains(point) {
+                                        frame.settings.menu_open = false;
+                                    } else if let Some(index) = layout.fps_options.iter()
+                                        .position(|rect| rect.contains(point))
+                                    {
+                                        frame.settings.fps_limit = RenderSettings::FPS_OPTIONS[index];
+                                    } else if let Some(index) = layout.distance_options.iter()
+                                        .position(|rect| rect.contains(point))
+                                    {
+                                        frame.settings.render_distance_chunks =
+                                            RenderSettings::DISTANCE_OPTIONS[index];
+                                    }
+                                    if let Some((window, _)) = renderer_state.as_ref() {
+                                        window.request_redraw();
+                                    }
+                                    ActiveTouch::Settings
+                                } else if layout.debug.contains(point) {
                                     if let Some((window, renderer)) = renderer_state.as_mut() {
                                         renderer.toggle_debug();
                                         window.request_redraw();
@@ -618,7 +654,7 @@ pub fn android_main(app: AndroidApp) {
                                 ActiveTouch::Sprint => frame.mobile_controls.sprint_pressed = false,
                                 ActiveTouch::Break => frame.mobile_controls.break_pressed = false,
                                 ActiveTouch::Place => frame.mobile_controls.place_pressed = false,
-                                ActiveTouch::Debug | ActiveTouch::Look => {}
+                                ActiveTouch::Debug | ActiveTouch::Settings | ActiveTouch::Look => {}
                             }
                             if let Some((window, _)) = renderer_state.as_ref() {
                                 window.request_redraw();
@@ -703,20 +739,23 @@ pub fn android_main(app: AndroidApp) {
                     (player_position[2].floor() as i32).div_euclid(16),
                 );
                 if current_stream_chunk != last_stream_chunk {
-                    let generated = engine.ensure_prototype_chunks_around(
-                        player_position[0].floor() as i32,
-                        player_position[2].floor() as i32,
-                        4,
-                    );
                     last_stream_chunk = current_stream_chunk;
-                    if generated > 0 {
-                        log::info!("Booking streamed {generated} new chunk columns");
-                        if let Some((window, renderer)) = renderer_state.as_mut() {
-                            if let Err(error) = renderer.sync_world(&engine) {
-                                log::error!("Renderer sync after chunk streaming failed: {error}");
-                            }
-                            window.request_redraw();
+                }
+
+                // Generate and upload at most one missing chunk column per frame.
+                // This spreads terrain creation and GPU buffer uploads across
+                // multiple frames instead of blocking the render loop on a chunk ring.
+                if let Some(position) = engine.ensure_next_prototype_chunk_around(
+                    player_position[0].floor() as i32,
+                    player_position[2].floor() as i32,
+                    4,
+                ) {
+                    log::debug!("Booking streamed chunk {}, {}", position.x, position.z);
+                    if let Some((window, renderer)) = renderer_state.as_mut() {
+                        if let Err(error) = renderer.sync_world(&engine) {
+                            log::error!("Renderer sync after chunk streaming failed: {error}");
                         }
+                        window.request_redraw();
                     }
                 }
 
@@ -728,16 +767,25 @@ pub fn android_main(app: AndroidApp) {
                 frame.camera.position = player.camera_position();
                 frame.camera.yaw = player.yaw();
                 frame.camera.pitch = player.pitch();
-                let deadline = next_frame_deadline.unwrap_or(now);
-                if now >= deadline {
+                if let Some(interval) = frame_interval(frame.settings.fps_limit) {
+                    let deadline = next_frame_deadline.unwrap_or(now);
+                    if now >= deadline {
+                        if let Some((window, _)) = renderer_state.as_ref() {
+                            window.request_redraw();
+                        }
+                        let next_deadline = Instant::now() + interval;
+                        next_frame_deadline = Some(next_deadline);
+                        active_loop.set_control_flow(ControlFlow::WaitUntil(next_deadline));
+                    } else {
+                        active_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+                    }
+                } else {
+                    // Uncapped test mode: let Winit continuously poll and redraw.
+                    next_frame_deadline = None;
+                    active_loop.set_control_flow(ControlFlow::Poll);
                     if let Some((window, _)) = renderer_state.as_ref() {
                         window.request_redraw();
                     }
-                    let next_deadline = Instant::now() + FRAME_INTERVAL;
-                    next_frame_deadline = Some(next_deadline);
-                    active_loop.set_control_flow(ControlFlow::WaitUntil(next_deadline));
-                } else {
-                    active_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
                 }
             } else {
                 next_frame_deadline = None;
