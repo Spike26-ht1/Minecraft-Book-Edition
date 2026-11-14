@@ -341,6 +341,16 @@ mod mobile_controls_tests {
     }
 
     #[test]
+    fn test_render_settings_offer_fps_and_distance_choices() {
+        let settings = RenderSettings::default();
+        assert_eq!(settings.fps_limit, 60);
+        assert_eq!(settings.render_distance_chunks, 4);
+        assert_eq!(RenderSettings::FPS_OPTIONS, [30, 60, 90, 0]);
+        assert_eq!(RenderSettings::DISTANCE_OPTIONS, [2, 4, 6, 8, 12]);
+        assert!(!settings.menu_open);
+    }
+
+    #[test]
     fn touch_rect_uses_inclusive_edges() {
         let rect = TouchRect { x: 10.0, y: 20.0, width: 30.0, height: 40.0 };
         assert!(rect.contains([10.0, 20.0]));
