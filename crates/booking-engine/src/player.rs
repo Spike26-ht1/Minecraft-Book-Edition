@@ -1,5 +1,8 @@
 use crate::BookingEngine;
 use book_world::ChunkManager;
+use std::fs::{self, OpenOptions};
+use std::io::{self, ErrorKind, Write};
+use std::path::Path;
 
 const PLAYER_RADIUS: f32 = 0.30;
 const PLAYER_HEIGHT: f32 = 1.80;
@@ -41,6 +44,110 @@ impl Default for PlayerController {
 
 impl PlayerController {
     /// Finds the highest solid block at the requested X/Z and spawns above it.
+    /// Restores a saved position only when it is finite and does not overlap
+    /// solid world geometry. Velocity is reset so lifecycle gaps never create
+    /// a large physics step on the next frame.
+    pub fn from_saved_state(
+        engine: &BookingEngine,
+        position: [f32; 3],
+        yaw: f32,
+        pitch: f32,
+    ) -> Option<Self> {
+        if !position.iter().all(|value| value.is_finite())
+            || !yaw.is_finite()
+            || !pitch.is_finite()
+        {
+            return None;
+        }
+
+        let player = Self {
+            position,
+            velocity: [0.0; 3],
+            yaw: yaw.rem_euclid(std::f32::consts::TAU),
+            pitch: pitch.clamp(-1.5533, 1.5533),
+            on_ground: false,
+        };
+        if player.collides(engine) {
+            return None;
+        }
+        Some(player)
+    }
+
+    /// Saves the player's location and view direction in a small versioned file.
+    pub fn save_to_path(&self, path: &Path) -> io::Result<()> {
+        let mut bytes = Vec::with_capacity(38);
+        bytes.extend_from_slice(b"BOOKPLYR");
+        bytes.extend_from_slice(&1_u16.to_le_bytes());
+        for value in [
+            self.position[0], self.position[1], self.position[2], self.yaw, self.pitch,
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        let checksum = player_checksum(&bytes);
+        bytes.extend_from_slice(&checksum.to_le_bytes());
+
+        if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+            fs::create_dir_all(parent)?;
+        }
+        let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("player.book");
+        let temporary_path = path.with_file_name(format!("{file_name}.tmp"));
+        let write_result = (|| -> io::Result<()> {
+            let mut file = OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .open(&temporary_path)?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+            drop(file);
+            #[cfg(windows)]
+            if path.exists() {
+                fs::remove_file(path)?;
+            }
+            fs::rename(&temporary_path, path)?;
+            Ok(())
+        })();
+        if write_result.is_err() {
+            let _ = fs::remove_file(&temporary_path);
+        }
+        write_result
+    }
+
+    /// Loads and validates a saved player, rejecting stale or obstructed poses.
+    pub fn load_from_path(engine: &BookingEngine, path: &Path) -> io::Result<Self> {
+        let bytes = fs::read(path)?;
+        const SAVE_LENGTH: usize = 8 + 2 + 5 * 4 + 8;
+        if bytes.len() != SAVE_LENGTH || &bytes[..8] != b"BOOKPLYR" {
+            return Err(io::Error::new(ErrorKind::InvalidData, "invalid player save header"));
+        }
+        let version = u16::from_le_bytes([bytes[8], bytes[9]]);
+        if version != 1 {
+            return Err(io::Error::new(ErrorKind::InvalidData, "unsupported player save version"));
+        }
+        let checksum_offset = SAVE_LENGTH - 8;
+        let expected = u64::from_le_bytes(
+            bytes[checksum_offset..].try_into().expect("fixed-size checksum"),
+        );
+        if player_checksum(&bytes[..checksum_offset]) != expected {
+            return Err(io::Error::new(ErrorKind::InvalidData, "player save checksum mismatch"));
+        }
+
+        let mut values = [0.0_f32; 5];
+        for (index, value) in values.iter_mut().enumerate() {
+            let offset = 10 + index * 4;
+            *value = f32::from_le_bytes(
+                bytes[offset..offset + 4].try_into().expect("fixed-size float"),
+            );
+        }
+        Self::from_saved_state(
+            engine,
+            [values[0], values[1], values[2]],
+            values[3],
+            values[4],
+        )
+        .ok_or_else(|| io::Error::new(ErrorKind::InvalidData, "saved player position is invalid or obstructed"))
+    }
+
     pub fn spawn(engine: &BookingEngine, world_x: i32, world_z: i32) -> Option<Self> {
         let registry = engine.block_registry();
         for world_y in (-32..=64).rev() {
@@ -203,6 +310,28 @@ mod tests {
     }
 
     #[test]
+    fn player_save_round_trip_preserves_position_and_view() {
+        let mut engine = BookingEngine::new();
+        engine.generate_prototype_terrain(1);
+        let mut player = PlayerController::spawn(&engine, 0, 0).expect("spawn surface");
+        player.look(0.35, -0.12);
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let path = std::env::temp_dir()
+            .join(format!("booking-player-{}-{timestamp}.book", std::process::id()));
+
+        player.save_to_path(&path).expect("save player");
+        let restored = PlayerController::load_from_path(&engine, &path).expect("load player");
+
+        assert_eq!(restored.position(), player.position());
+        assert!((restored.yaw() - player.yaw()).abs() < 0.0001);
+        assert!((restored.pitch() - player.pitch()).abs() < 0.0001);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn player_moves_forward_without_free_flight() {
         let mut engine = BookingEngine::new();
         engine.generate_prototype_terrain(1);
@@ -344,4 +473,14 @@ mod interaction_tests {
         assert!(engine.place_block_at([0, 50, 0], BlockId(3)));
         assert_eq!(engine.world().get_block(0, 50, 0), Some(BlockId(3)));
     }
+}
+
+
+fn player_checksum(bytes: &[u8]) -> u64 {
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in bytes {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
