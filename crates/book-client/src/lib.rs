@@ -47,17 +47,15 @@ fn perform_touch_block_action(
     engine: &mut BookingEngine,
     player: &PlayerController,
     place: bool,
-) -> bool {
-    let Some(hit) = engine.raycast_blocks(player.camera_position(), player.forward(), 6.0) else {
-        return false;
-    };
+) -> Option<[i32; 3]> {
+    let hit = engine.raycast_blocks(player.camera_position(), player.forward(), 6.0)?;
     if place {
         if player.intersects_block(hit.adjacent) {
-            return false;
+            return None;
         }
-        engine.place_block_at(hit.adjacent, BlockId(3))
+        engine.place_block_at(hit.adjacent, BlockId(3)).then_some(hit.adjacent)
     } else {
-        engine.break_block_at(hit.position)
+        engine.break_block_at(hit.position).then_some(hit.position)
     }
 }
 
@@ -413,7 +411,9 @@ pub fn android_main(app: AndroidApp) {
                     ) {
                         if engine.break_block_at(hit.position) {
                             if let Some((window, renderer)) = renderer_state.as_mut() {
-                                if let Err(error) = renderer.sync_world(&engine) {
+                                let chunk_x = hit.position[0].div_euclid(16);
+                                let chunk_z = hit.position[2].div_euclid(16);
+                                if let Err(error) = renderer.sync_chunk(&engine, chunk_x, chunk_z) {
                                     log::error!("World mesh sync after mouse block break failed: {error}");
                                 }
                                 window.request_redraw();
@@ -462,9 +462,13 @@ pub fn android_main(app: AndroidApp) {
                                     ActiveTouch::Sprint
                                 } else if layout.break_block.contains(point) {
                                     frame.mobile_controls.break_pressed = true;
-                                    if perform_touch_block_action(&mut engine, &player, false) {
+                                    if let Some(changed_position) =
+                                        perform_touch_block_action(&mut engine, &player, false)
+                                    {
                                         if let Some((window, renderer)) = renderer_state.as_mut() {
-                                            if let Err(error) = renderer.sync_world(&engine) {
+                                            let chunk_x = changed_position[0].div_euclid(16);
+                                            let chunk_z = changed_position[2].div_euclid(16);
+                                            if let Err(error) = renderer.sync_chunk(&engine, chunk_x, chunk_z) {
                                                 log::error!("Renderer sync after mobile mining failed: {error}");
                                             }
                                             window.request_redraw();
@@ -476,9 +480,13 @@ pub fn android_main(app: AndroidApp) {
                                     ActiveTouch::Break
                                 } else if layout.place_block.contains(point) {
                                     frame.mobile_controls.place_pressed = true;
-                                    if perform_touch_block_action(&mut engine, &player, true) {
+                                    if let Some(changed_position) =
+                                        perform_touch_block_action(&mut engine, &player, true)
+                                    {
                                         if let Some((window, renderer)) = renderer_state.as_mut() {
-                                            if let Err(error) = renderer.sync_world(&engine) {
+                                            let chunk_x = changed_position[0].div_euclid(16);
+                                            let chunk_z = changed_position[2].div_euclid(16);
+                                            if let Err(error) = renderer.sync_chunk(&engine, chunk_x, chunk_z) {
                                                 log::error!("Renderer sync after mobile placement failed: {error}");
                                             }
                                             window.request_redraw();
@@ -561,14 +569,16 @@ pub fn android_main(app: AndroidApp) {
                                     let dx = location.0 - start.0;
                                     let dy = location.1 - start.1;
                                     if dx * dx + dy * dy < 144.0 {
-                                        let changed = perform_touch_block_action(
+                                        let changed_position = perform_touch_block_action(
                                             &mut engine,
                                             &player,
                                             held_for >= Duration::from_millis(350),
                                         );
-                                        if changed {
+                                        if let Some(changed_position) = changed_position {
                                             if let Some((window, renderer)) = renderer_state.as_mut() {
-                                                if let Err(error) = renderer.sync_world(&engine) {
+                                                let chunk_x = changed_position[0].div_euclid(16);
+                                                let chunk_z = changed_position[2].div_euclid(16);
+                                                if let Err(error) = renderer.sync_chunk(&engine, chunk_x, chunk_z) {
                                                     log::error!("Renderer sync after world tap failed: {error}");
                                                 }
                                                 window.request_redraw();
