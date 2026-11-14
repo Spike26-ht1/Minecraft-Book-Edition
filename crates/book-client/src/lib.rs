@@ -118,23 +118,31 @@ fn enable_android_immersive_fullscreen(app: &AndroidApp) {
     let java_app = app.clone();
     app.run_on_java_main_thread(Box::new(move || {
         use jni::objects::JObject;
+        use jni::refs::Global;
         use jni::vm::JavaVM;
-        use jni::JValue;
-        use std::mem::ManuallyDrop;
+        use jni::{jni_sig, jni_str, JValue};
 
         let vm = unsafe { JavaVM::from_raw(java_app.vm_as_ptr().cast()) };
         let result = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
-            // activity_as_ptr is an unowned JNI global reference. Wrap it in
-            // ManuallyDrop so JObject does not try to delete the global ref.
-            let activity_global = ManuallyDrop::new(unsafe {
-                JObject::from_raw(java_app.activity_as_ptr() as jni::sys::jobject)
-            });
-            let activity = env.new_local_ref(&*activity_global)?;
+            // AndroidApp owns this global Activity reference. Borrow it through
+            // Env instead of wrapping it as an owned JObject/Global.
+            let activity_raw = java_app.activity_as_ptr() as jni::sys::jobject;
+            let activity = unsafe { env.as_cast_raw::<Global<JObject>>(&activity_raw)? };
             let window = env
-                .call_method(&activity, "getWindow", "()Landroid/view/Window;", &[])?
+                .call_method(
+                    activity.as_ref(),
+                    jni_str!("getWindow"),
+                    jni_sig!("()Landroid/view/Window;"),
+                    &[],
+                )?
                 .l()?;
             let decor_view = env
-                .call_method(&window, "getDecorView", "()Landroid/view/View;", &[])?
+                .call_method(
+                    &window,
+                    jni_str!("getDecorView"),
+                    jni_sig!("()Landroid/view/View;"),
+                    &[],
+                )?
                 .l()?;
 
             const IMMERSIVE_FLAGS: i32 =
@@ -147,8 +155,8 @@ fn enable_android_immersive_fullscreen(app: &AndroidApp) {
 
             env.call_method(
                 &decor_view,
-                "setSystemUiVisibility",
-                "(I)V",
+                jni_str!("setSystemUiVisibility"),
+                jni_sig!("(I)V"),
                 &[JValue::Int(IMMERSIVE_FLAGS)],
             )?;
             Ok(())
