@@ -47,7 +47,7 @@ cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release -p boo
 gradle -p ../android assembleDebug
 ```
 
-The GitHub Actions workflow performs the same checks and publishes a debug APK artifact when the build succeeds.
+The GitHub Actions workflow is configured to perform the same checks and publish a debug APK artifact when the build succeeds. A successful run and a physical-device test have not yet been confirmed.
 
 ## Scope and ownership
 
