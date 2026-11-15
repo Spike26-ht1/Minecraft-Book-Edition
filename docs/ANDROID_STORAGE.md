@@ -1,6 +1,6 @@
-# Android storage layout — Pre-Alpha 1.2.0
+# Android storage layout — Pre-Alpha 1.2.1
 
-The app creates its user-visible storage under `Android/media/com.spike26.minecraftbookedition/`.
+The app creates its user-visible storage under `Android/media/<application-id>/`. The identifier is derived from the app's actual `Android/data/<application-id>/files` path, so a side-by-side test APK with a package suffix writes to its own matching media directory.
 
 ```text
 game/
