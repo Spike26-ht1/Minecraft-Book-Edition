@@ -21,6 +21,7 @@ internal class GameHud(
 ) {
     private val debugPanel = TextView(activity)
     private lateinit var controls: LinearLayout
+    private lateinit var jumpButton: TextView
     private var debugVisible = false
     private var controlsVisible = true
     private var sensitivityLevel = 1
@@ -93,8 +94,8 @@ internal class GameHud(
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        middle.addView(directionButton("◀", -1f, 0f))
-        middle.addView(directionButton("▶", 1f, 0f))
+        middle.addView(directionButton("◀", -1f))
+        middle.addView(directionButton("▶", 1f))
         controls.addView(middle)
         controls.addView(controlRow("▼") { holdButton(it, -1f, 0f, 0f) })
         root.addView(controls, FrameLayout.LayoutParams(
@@ -103,7 +104,7 @@ internal class GameHud(
             Gravity.BOTTOM or Gravity.START
         ).apply { setMargins(dp(18), 0, 0, dp(18)) })
 
-        val jump = hudButton("PULAR").apply {
+        jumpButton = hudButton("SUBIR").apply {
             setOnTouchListener { _, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> { vertical = 1f; sendMovement(); true }
@@ -112,7 +113,7 @@ internal class GameHud(
                 }
             }
         }
-        root.addView(jump, FrameLayout.LayoutParams(dp(92), dp(58), Gravity.BOTTOM or Gravity.END).apply {
+        root.addView(jumpButton, FrameLayout.LayoutParams(dp(92), dp(58), Gravity.BOTTOM or Gravity.END).apply {
             setMargins(0, 0, dp(24), dp(28))
         })
     }
@@ -147,6 +148,7 @@ internal class GameHud(
     fun toggleControls(): Boolean {
         controlsVisible = !controlsVisible
         controls.visibility = if (controlsVisible) View.VISIBLE else View.GONE
+        jumpButton.visibility = if (controlsVisible) View.VISIBLE else View.GONE
         return controlsVisible
     }
 
@@ -175,7 +177,7 @@ internal class GameHud(
         return row
     }
 
-    private fun directionButton(symbol: String, side: Float, ignored: Float): View =
+    private fun directionButton(symbol: String, side: Float): View =
         hudButton(symbol).apply {
             setOnTouchListener { _, event ->
                 when (event.actionMasked) {
@@ -193,13 +195,11 @@ internal class GameHud(
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 forward = forwardValue
-                strafe = strafeValue
                 vertical = verticalValue
                 sendMovement()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 forward = 0f
-                strafe = 0f
                 vertical = 0f
                 sendMovement()
             }
