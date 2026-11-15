@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.content.Intent
 import android.opengl.EGL14
 import android.opengl.GLSurfaceView
 import android.os.Bundle
@@ -24,6 +25,7 @@ class MainActivity : Activity() {
     private var gameSurface: GLSurfaceView? = null
     private var showingGame = false
     private var gameRenderer: BookRenderer? = null
+    private val resourcePackRequestCode = 501
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -180,7 +182,8 @@ class MainActivity : Activity() {
             "Mostrar / ocultar controles mobile",
             "Ciclo de sensibilidade da câmera",
             "Limite de FPS: $currentFpsMode",
-            "Voltar ao menu principal"
+            "Voltar ao menu principal",
+            "Importar Resource Pack (.mcpack / .zip)"
         )
         AlertDialog.Builder(this)
             .setTitle("Configurações de teste")
@@ -216,9 +219,50 @@ class MainActivity : Activity() {
                         ).show()
                     }
                     4 -> returnToMainMenu()
+                    5 -> selectResourcePack()
                 }
             }
             .show()
+    }
+
+
+    private fun selectResourcePack() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(
+                "application/zip",
+                "application/octet-stream",
+                "application/x-zip-compressed"
+            ))
+        }
+        startActivityForResult(intent, resourcePackRequestCode)
+    }
+
+    @Deprecated("Uses Android's document picker for compatibility.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != resourcePackRequestCode || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        android.widget.Toast.makeText(this, "Lendo Resource Pack…", android.widget.Toast.LENGTH_SHORT).show()
+        Thread {
+            val result = runCatching { ResourcePackImporter.import(this, uri) }
+            runOnUiThread {
+                result.onSuccess { report ->
+                    android.widget.Toast.makeText(
+                        this,
+                        "Pack: ${report.name} • ${report.loaded} texturas • ${report.missing} ausentes",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }.onFailure { error ->
+                    AlertDialog.Builder(this)
+                        .setTitle("Falha ao importar Resource Pack")
+                        .setMessage(error.message ?: "Arquivo inválido.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }.start()
     }
 
     private fun returnToMainMenu() {
