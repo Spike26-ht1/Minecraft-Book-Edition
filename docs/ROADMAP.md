@@ -36,7 +36,7 @@
 
 ## G3 — renderer
 
-- [ ] Add Resource Pack parsing, texture atlas and material definitions (Mojang assets must remain user-supplied unless separately licensed).
+- [x] Add first-pass user Resource Pack import, terrain_texture.json parser and local PNG atlas/index generation.\n- [ ] Upload atlas pages to Book64 GLES and render voxel faces with atlas UVs.\n- [ ] Add multi-page atlases, flipbook textures, material/alpha modes and biome tinting (Mojang assets remain user-supplied unless separately licensed).
 - [ ] Add frustum culling and render-distance controls.
 - [ ] Add GPU resource lifecycle handling.
 - [ ] Profile frame pacing and memory on target devices.
