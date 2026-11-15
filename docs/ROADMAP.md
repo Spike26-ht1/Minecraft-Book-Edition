@@ -15,13 +15,16 @@
 
 ## G1 — playable voxel prototype
 
-- [ ] Add first-person camera and touch look controls.
-- [ ] Add movement controls and a fixed-step simulation loop.
+- [x] Add first-person free-camera look and touch movement controls for the mobile prototype.
+- [x] Add a first-pass F3 diagnostic panel with measured FPS/frame time, viewport, heap and native camera telemetry.
+- [x] Add an in-game test menu for F3 visibility, mobile controls and camera sensitivity.
+- [ ] Add a fixed-step simulation loop, player physics, collision and grounded jumping.
 - [ ] Add block ray selection and basic block interaction.
 - [ ] Add player collision and gravity.
 - [ ] Add multi-chunk world and cross-chunk neighbor lookup.
 - [ ] Add mesh invalidation and bounded chunk loading.
-- [ ] Add pause menu and persistent graphics settings.
+- [ ] Add a full pause menu and persistent graphics settings.
+- [ ] Expand F3 with biome, light, targeted block and player/world data as those systems become available.
 
 ## G2 — world foundation
 
@@ -33,7 +36,7 @@
 
 ## G3 — renderer
 
-- [ ] Add texture atlas and material definitions.
+- [ ] Add Resource Pack parsing, texture atlas and material definitions (Mojang assets must remain user-supplied unless separately licensed).
 - [ ] Add frustum culling and render-distance controls.
 - [ ] Add GPU resource lifecycle handling.
 - [ ] Profile frame pacing and memory on target devices.
