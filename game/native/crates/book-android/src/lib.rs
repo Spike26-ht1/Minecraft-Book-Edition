@@ -6,8 +6,8 @@ mod android {
     use std::sync::{Mutex, OnceLock};
 
     use book64_gles::GlesRenderer;
-    use jni::objects::JObject;
-    use jni::sys::jint;
+    use jni::objects::{JObject, JString};
+    use jni::sys::{jfloat, jint, jstring};
     use jni::JNIEnv;
 
     static RENDERER: OnceLock<Mutex<Option<GlesRenderer>>> = OnceLock::new();
@@ -67,13 +67,65 @@ mod android {
         _env: JNIEnv<'_>,
         _this: JObject<'_>,
     ) {
+        let mut slot = renderer_slot()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        if let Some(renderer) = slot.as_mut() {
+            unsafe { renderer.draw() };
+        }
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_dev_bookedition_game_NativeBridge_nativeSetMovement(
+        _env: JNIEnv<'_>,
+        _this: JObject<'_>,
+        forward: jfloat,
+        strafe: jfloat,
+        vertical: jfloat,
+    ) {
+        let mut slot = renderer_slot()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        if let Some(renderer) = slot.as_mut() {
+            renderer.set_movement(forward, strafe, vertical);
+        }
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_dev_bookedition_game_NativeBridge_nativeLook(
+        _env: JNIEnv<'_>,
+        _this: JObject<'_>,
+        yaw_delta: jfloat,
+        pitch_delta: jfloat,
+    ) {
+        let mut slot = renderer_slot()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        if let Some(renderer) = slot.as_mut() {
+            renderer.rotate_camera(yaw_delta, pitch_delta);
+        }
+    }
+
+    #[no_mangle]
+    pub extern "system" fn Java_dev_bookedition_game_NativeBridge_nativeGetDebugInfo(
+        env: JNIEnv<'_>,
+        _this: JObject<'_>,
+    ) -> jstring {
         let slot = renderer_slot()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-        if let Some(renderer) = slot.as_ref() {
-            unsafe { renderer.draw() };
-        }
+        let info = slot
+            .as_ref()
+            .map(|renderer| renderer.debug_info())
+            .unwrap_or_else(|| "Book64 renderer not initialized".to_owned());
+
+        env.new_string(info)
+            .map(JString::into_raw)
+            .unwrap_or(std::ptr::null_mut())
     }
 }
 
