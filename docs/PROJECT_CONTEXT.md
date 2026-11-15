@@ -63,3 +63,17 @@ A build de testes do launcher inclui:
 - Botão Jogar desativado enquanto o cliente Bedrock não estiver integrado.
 
 A build não inclui cliente Bedrock, autenticação, instalação de versões de jogo ou execução de mundos. O APK de depuração é produzido pelo workflow do GitHub Actions e não é uma versão de distribuição final.
+
+
+## Atualização — integração launcher + jogo
+
+- O launcher é a entrada única do aplicativo Android.
+- O módulo `game/android/app` é uma Android Library chamada `:game-runtime`, incluída no projeto Gradle raiz.
+- O APK do launcher incorpora a Activity do jogo e a biblioteca Rust/JNI.
+- O botão Jogar do launcher inicia `dev.bookedition.game.MainActivity` por Intent explícito.
+- O menu do jogo aparece antes da cena: Jogar, Configurações e Sair.
+- A cena voxel de teste só é criada depois da seleção de Jogar no menu do jogo.
+- Branch de integração: `launcher/game-integration`.
+- As branches `launcher/foundation` e `game/clean-foundation` permanecem preservadas.
+- A compilação CI deve gerar um único APK debug com launcher + jogo, ABI arm64-v8a.
+- Ainda não declarar build validada até CI passar e instalação física ser testada.
