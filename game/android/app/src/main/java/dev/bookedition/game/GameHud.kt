@@ -69,7 +69,7 @@ internal class GameHud(
             setMargins(dp(16), dp(16), 0, 0)
         })
 
-        val menu = hudButton("MENU").apply { setOnClickListener(onMenu) }
+        val menu = hudButton("MENU").apply { setOnClickListener { onMenu() } }
         root.addView(menu, FrameLayout.LayoutParams(dp(76), dp(42), Gravity.TOP or Gravity.END).apply {
             setMargins(0, dp(16), dp(16), 0)
         })
