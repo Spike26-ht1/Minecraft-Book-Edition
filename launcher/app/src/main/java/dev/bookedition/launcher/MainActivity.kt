@@ -1,12 +1,10 @@
 package dev.bookedition.launcher
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -70,6 +68,8 @@ private enum class LauncherPage(val label: String, val symbol: String) {
     LOGS("Logs", "≡")
 }
 
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BookEditionApp() {
     val context = LocalContext.current
