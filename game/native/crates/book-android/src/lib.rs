@@ -111,7 +111,7 @@ mod android {
 
     #[no_mangle]
     pub extern "system" fn Java_dev_bookedition_game_NativeBridge_nativeGetDebugInfo(
-        env: JNIEnv<'_>,
+        mut env: JNIEnv<'_>,
         _this: JObject<'_>,
     ) -> jstring {
         let slot = renderer_slot()
