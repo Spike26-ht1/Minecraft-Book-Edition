@@ -1,0 +1,17 @@
+# Rust
+/game/native/target/
+/target/
+
+# Android / Gradle
+/game/android/.gradle/
+/game/android/local.properties
+/game/android/**/build/
+/game/android/app/src/main/jniLibs/
+
+# IDE
+.idea/
+*.iml
+
+# Generated packages
+*.apk
+*.aab
