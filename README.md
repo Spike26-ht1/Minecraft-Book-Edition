@@ -49,7 +49,9 @@ Bedrock world, resource-pack, add-on, and server compatibility must be implement
 
 Copy an extracted resource-pack folder into:
 
-`Android/media/com.spike26.minecraftbookedition/game/resource_packs/<pack-name>/`
+`Android/media/<application-id>/game/resource_packs/<pack-name>/`
+
+For the normal APK, `<application-id>` is `com.spike26.minecraftbookedition`. The side-by-side diagnostic APK uses `com.spike26.minecraftbookedition.fullscreenfix`, so copy the pack into that matching folder when testing that APK. The app reads the package ID from Android's app-specific data path instead of hard-coding it.
 
 The folder should contain `textures/terrain_texture.json` and the PNG files referenced by its `texture_data` entries. The current prototype importer looks for `grass_top` (or `grass` / `grass_block`), `dirt`, and `stone`. This is a manually copied, extracted resource-pack import; the game does not read another application's private Minecraft data or extract `.mcpack` files itself. It does not download proprietary game assets, extract `.mcpack` archives, or access another app's private Minecraft installation. If no compatible extracted pack is found, the renderer uses its built-in test atlas.
 
