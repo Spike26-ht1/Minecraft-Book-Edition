@@ -677,6 +677,7 @@ impl RendererBackend for OpenGlRenderer {
 
     fn render(&mut self, frame: &RenderFrame) -> Result<(), RendererError> {
         self.update_frame_stats();
+        #[cfg(target_os = "android")]
         let render_started = Instant::now();
         let mut target = self.display.draw();
         let clear = frame.clear_color;
