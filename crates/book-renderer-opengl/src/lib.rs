@@ -239,6 +239,8 @@ pub struct OpenGlRenderer {
     mobile_controls_signature: Option<(u32, u32, MobileControlsState, RenderSettings, bool)>,
     #[cfg(target_os = "android")]
     first_frame_logged: bool,
+    #[cfg(target_os = "android")]
+    last_perf_log: Instant,
 }
 
 impl OpenGlRenderer {
@@ -361,6 +363,8 @@ impl OpenGlRenderer {
             mobile_controls_signature,
             #[cfg(target_os = "android")]
             first_frame_logged: false,
+            #[cfg(target_os = "android")]
+            last_perf_log: now,
         }))
     }
 
@@ -673,6 +677,7 @@ impl RendererBackend for OpenGlRenderer {
 
     fn render(&mut self, frame: &RenderFrame) -> Result<(), RendererError> {
         self.update_frame_stats();
+        let render_started = Instant::now();
         let mut target = self.display.draw();
         let clear = frame.clear_color;
         target.clear_color_and_depth((clear.red, clear.green, clear.blue, clear.alpha), 1.0);
@@ -713,6 +718,33 @@ impl RendererBackend for OpenGlRenderer {
             self.draw_loading_overlay(&mut target)?;
         }
         target.finish().map_err(|error| RendererError::new(format!("OpenGL present: {error}")))?;
+
+        #[cfg(target_os = "android")]
+        {
+            // A long interval between presented frames catches stalls that occur
+            // in the event loop, while render_work_ms isolates time spent in the
+            // renderer and the driver/present call itself.
+            let render_work_ms = render_started.elapsed().as_secs_f32() * 1000.0;
+            if (self.last_frame_ms >= 50.0 || render_work_ms >= 25.0)
+                && self.last_perf_log.elapsed() >= Duration::from_secs(1)
+            {
+                let vertex_count: usize = self.chunk_meshes
+                    .iter()
+                    .map(|mesh| mesh.vertices.len())
+                    .sum();
+                record_android_diagnostic(&format!(
+                    "PERF RENDER STALL: frame_interval_ms={:.2}, render_work_ms={:.2}, fps={}, visible_chunks={}, gpu_chunks={}, vertices={}",
+                    self.last_frame_ms,
+                    render_work_ms,
+                    self.fps,
+                    self.visible_chunk_count,
+                    self.chunk_meshes.len(),
+                    vertex_count,
+                ));
+                self.last_perf_log = Instant::now();
+            }
+        }
+
         #[cfg(target_os = "android")]
         if !self.first_frame_logged {
             self.first_frame_logged = true;
