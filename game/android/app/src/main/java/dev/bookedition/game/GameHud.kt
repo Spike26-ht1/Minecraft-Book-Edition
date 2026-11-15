@@ -89,7 +89,7 @@ internal class GameHud(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
-        controls.addView(controlRow("▲") { holdButton(it, 1f, 0f, 0f) })
+        controls.addView(controlRow("▲") { holdButton(it, 1f, 0f) })
         val middle = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -97,7 +97,7 @@ internal class GameHud(
         middle.addView(directionButton("◀", -1f))
         middle.addView(directionButton("▶", 1f))
         controls.addView(middle)
-        controls.addView(controlRow("▼") { holdButton(it, -1f, 0f, 0f) })
+        controls.addView(controlRow("▼") { holdButton(it, -1f, 0f) })
         root.addView(controls, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -191,7 +191,7 @@ internal class GameHud(
             }
         }
 
-    private fun holdButton(event: MotionEvent, forwardValue: Float, strafeValue: Float, verticalValue: Float): Boolean {
+    private fun holdButton(event: MotionEvent, forwardValue: Float, verticalValue: Float): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 forward = forwardValue
