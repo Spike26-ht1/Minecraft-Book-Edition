@@ -1,4 +1,4 @@
-# Minecraft Book Edition — Pre-Alpha 1.2.0
+# Minecraft Book Edition — Pre-Alpha 1.2.1
 
 An independent, open-source Bedrock-inspired client foundation written in Rust.
 
@@ -19,7 +19,7 @@ The first test-build target is **Android ARM64 (arm64-v8a)**. Desktop targets re
 - Saved-world GPU uploads are deferred until after the first loading frame and synchronized incrementally, rather than uploading the whole saved world inside renderer construction.
 - Neighbor-aware face culling across all six chunk-section directions.
 - One merged GPU vertex buffer per chunk column, with distance-based chunk render culling.
-- CPU texture-atlas packing, PNG decoding, and nearest-neighbor GPU sampling. Android now checks `Android/media/com.spike26.minecraftbookedition/game/resource_packs/` for an extracted Bedrock resource pack containing `textures/terrain_texture.json` and the referenced PNGs; it loads the grass-top, dirt, and stone tiles when present, otherwise it safely falls back to the generated prototype atlas.
+- CPU texture-atlas packing, PNG decoding, and nearest-neighbor GPU sampling. Android now checks `Android/media/<application-id>/game/resource_packs/` for an extracted Bedrock resource pack containing `textures/terrain_texture.json` and the referenced PNGs; it loads the grass-top, dirt, and stone tiles when present, otherwise it safely falls back to the generated prototype atlas.
 - Face normals and directional lighting.
 - First-person player controller with gravity, jumping, sprinting, and axis-separated voxel collision.
 - 3D DDA block raycasting, touch-tap/mouse block breaking, and long-press prototype stone placement.
@@ -31,6 +31,7 @@ The first test-build target is **Android ARM64 (arm64-v8a)**. Desktop targets re
 - Test settings menu (`CFG`) with 30/60/90 FPS and uncapped modes plus 2/4/6/8/12-chunk render-distance choices.
 - Persistent GPU buffers for the mobile HUD; debug statistics update at a limited interval rather than rebuilding the overlay every frame.
 - F3 / DBG debug overlay with FPS, frame time, visible chunk count, and renderer information.
+- Long-frame diagnostics: slow event-loop updates, chunk generation, mesh uploads, render/present time, loaded chunks, and vertex counts are recorded in the local game log.
 
 ## Book Loader and mod API
 
@@ -50,7 +51,7 @@ Copy an extracted resource-pack folder into:
 
 `Android/media/com.spike26.minecraftbookedition/game/resource_packs/<pack-name>/`
 
-The folder should contain `textures/terrain_texture.json` and the PNG files referenced by its `texture_data` entries. The current prototype importer looks for `grass_top` (or `grass` / `grass_block`), `dirt`, and `stone`. It does not download proprietary game assets, extract `.mcpack` archives, or access another app's private Minecraft installation. If no compatible extracted pack is found, the renderer uses its built-in test atlas.
+The folder should contain `textures/terrain_texture.json` and the PNG files referenced by its `texture_data` entries. The current prototype importer looks for `grass_top` (or `grass` / `grass_block`), `dirt`, and `stone`. This is a manually copied, extracted resource-pack import; the game does not read another application's private Minecraft data or extract `.mcpack` files itself. It does not download proprietary game assets, extract `.mcpack` archives, or access another app's private Minecraft installation. If no compatible extracted pack is found, the renderer uses its built-in test atlas.
 
 ## Android test build
 
@@ -58,7 +59,7 @@ The folder should contain `textures/terrain_texture.json` and the PNG files refe
 - ARM64 / arm64-v8a.
 - Landscape-only immersive fullscreen mode with a native Android startup splash theme and a temporary in-engine loading screen.
 - OpenGL ES 3.0.
-- F3 on a connected physical keyboard toggles the debug overlay.
+- F3 on a connected physical keyboard toggles the debug overlay. Long frame stalls are also recorded in `game/logs/latest.log` with separate timings for simulation, chunk generation, mesh upload, and render/present.
 - Left analog stick: move and strafe.
 - PULO: jump; CORRER: sprint while held.
 - MINAR: break the targeted block; COLOCAR: place prototype stone against the targeted face.
