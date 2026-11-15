@@ -46,3 +46,11 @@ The APK contains the launcher and embedded game runtime. It is not necessary to 
 7. Record device model, Android version, frame rate and any Book64/book_android errors.
 
 A successful Gradle build is necessary but does not replace physical-device validation.
+
+## External media storage
+
+At startup, the launcher initializes an app-specific public media directory using Android `Context.getExternalMediaDirs()`. The expected primary-storage path is:
+
+`/storage/emulated/0/Android/media/dev.bookedition.launcher/book-edition/`
+
+The app creates `resource-packs`, `worlds`, `exports`, `logs`, and `cache` subdirectories. The actual path is displayed under Launcher → Settings. The app retains private internal storage as a fallback if external media storage is unavailable. User-selected Bedrock packs are imported into the external `resource-packs/active` folder when possible.
