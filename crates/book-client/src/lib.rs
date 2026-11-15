@@ -16,7 +16,8 @@ use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const PACKAGE_ID: &str = "com.spike26.minecraftbookedition";
+mod media_storage;
+use media_storage::derive_media_root;
 fn frame_interval(fps_limit: u16) -> Option<Duration> {
     if fps_limit == 0 {
         None
@@ -226,24 +227,6 @@ fn enable_android_immersive_fullscreen(app: &AndroidApp) {
     }));
 }
 
-fn derive_media_root(external_files_path: &Path) -> Option<PathBuf> {
-    // AndroidApp exposes Android/data/<package>/files. Its app-specific media
-    // directory is the sibling Android/media/<package>.
-    let package_dir = external_files_path.parent()?;
-    if package_dir.file_name()?.to_str()? != PACKAGE_ID {
-        return None;
-    }
-    let data_dir = package_dir.parent()?;
-    if data_dir.file_name()?.to_str()? != "data" {
-        return None;
-    }
-    let android_dir = data_dir.parent()?;
-    if android_dir.file_name()?.to_str()? != "Android" {
-        return None;
-    }
-    Some(android_dir.join("media").join(PACKAGE_ID))
-}
-
 fn append_startup_log(path: &Path, message: &str) {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -451,6 +434,7 @@ pub fn android_main(app: AndroidApp) {
     let mut jump_queued = false;
     let mut next_frame_deadline: Option<Instant> = None;
     let mut last_simulation_tick = Instant::now();
+    let mut last_update_stall_log = Instant::now();
     let spawn_position = player.position();
     let mut last_stream_chunk = (
         (spawn_position[0].floor() as i32).div_euclid(16),
@@ -514,7 +498,7 @@ pub fn android_main(app: AndroidApp) {
                         enable_android_immersive_fullscreen(&fullscreen_app);
                         match OpenGlRenderer::new_with_atlas(
                             active_loop,
-                            "Minecraft Book Edition — Pre-Alpha 1.2.0",
+                            "Minecraft Book Edition — Pre-Alpha 1.2.1",
                             1280,
                             720,
                             &engine,
@@ -568,7 +552,7 @@ pub fn android_main(app: AndroidApp) {
                 );
                 match OpenGlRenderer::new_with_atlas(
                     active_loop,
-                    "Minecraft Book Edition — Pre-Alpha 1.2.0",
+                    "Minecraft Book Edition — Pre-Alpha 1.2.1",
                     1280,
                     720,
                     &engine,
@@ -952,6 +936,7 @@ pub fn android_main(app: AndroidApp) {
         Event::AboutToWait => {
             if renderer_state.is_some() {
                 const LOOK_STEP: f32 = 0.025;
+                let update_started = Instant::now();
                 let now = Instant::now();
                 let delta_seconds = now.duration_since(last_simulation_tick).as_secs_f32();
                 last_simulation_tick = now;
@@ -975,7 +960,9 @@ pub fn android_main(app: AndroidApp) {
                     }
                 };
                 jump_queued = false;
+                let simulation_started = Instant::now();
                 player.update(&engine, input, delta_seconds);
+                let simulation_ms = simulation_started.elapsed().as_secs_f32() * 1000.0;
 
                 let player_position = player.position();
                 let current_stream_chunk = (
@@ -991,6 +978,7 @@ pub fn android_main(app: AndroidApp) {
                 // This spreads terrain creation and GPU buffer uploads across
                 // multiple frames instead of blocking the render loop on a chunk ring.
                 let mut world_chunk_generated = false;
+                let generation_started = Instant::now();
                 if stream_pending {
                     if let Some(position) = engine.ensure_next_prototype_chunk_around(
                         player_position[0].floor() as i32,
@@ -1003,7 +991,9 @@ pub fn android_main(app: AndroidApp) {
                         stream_pending = false;
                     }
                 }
+                let chunk_generation_ms = generation_started.elapsed().as_secs_f32() * 1000.0;
 
+                let mesh_upload_started = Instant::now();
                 if let Some((window, renderer)) = renderer_state.as_mut() {
                     match renderer.sync_next_chunk(&engine) {
                         Ok(uploaded) => {
@@ -1028,6 +1018,7 @@ pub fn android_main(app: AndroidApp) {
                         }
                     }
                 }
+                let mesh_upload_ms = mesh_upload_started.elapsed().as_secs_f32() * 1000.0;
 
                 if pressed_keys.contains(&KeyCode::ArrowLeft) { player.look(-LOOK_STEP, 0.0); }
                 if pressed_keys.contains(&KeyCode::ArrowRight) { player.look(LOOK_STEP, 0.0); }
@@ -1037,6 +1028,29 @@ pub fn android_main(app: AndroidApp) {
                 frame.camera.position = player.camera_position();
                 frame.camera.yaw = player.yaw();
                 frame.camera.pitch = player.pitch();
+
+                let update_ms = update_started.elapsed().as_secs_f32() * 1000.0;
+                if update_ms >= 25.0
+                    && last_update_stall_log.elapsed() >= Duration::from_secs(1)
+                {
+                    let message = format!(
+                        "PERF UPDATE STALL: update_ms={update_ms:.2}, simulation_ms={simulation_ms:.2}, chunk_generation_ms={chunk_generation_ms:.2}, mesh_upload_ms={mesh_upload_ms:.2}, loaded_chunks={}, gpu_chunks={}, fps_limit={}",
+                        engine.loaded_chunk_count(),
+                        renderer_state
+                            .as_ref()
+                            .map(|(_, renderer)| renderer.loaded_gpu_chunk_count())
+                            .unwrap_or_default(),
+                        if frame.settings.fps_limit == 0 {
+                            "uncapped".to_owned()
+                        } else {
+                            frame.settings.fps_limit.to_string()
+                        },
+                    );
+                    log::warn!("{message}");
+                    book_renderer_opengl::record_android_diagnostic(&message);
+                    last_update_stall_log = Instant::now();
+                }
+
                 if let Some(interval) = frame_interval(frame.settings.fps_limit) {
                     let deadline = next_frame_deadline.unwrap_or(now);
                     if now >= deadline {
@@ -1064,7 +1078,7 @@ pub fn android_main(app: AndroidApp) {
                         book_renderer_opengl::record_android_diagnostic("Renderer: retrying Android EGL/OpenGL initialization");
                         match OpenGlRenderer::new_with_atlas(
                             active_loop,
-                            "Minecraft Book Edition — Pre-Alpha 1.2.0",
+                            "Minecraft Book Edition — Pre-Alpha 1.2.1",
                             1280,
                             720,
                             &engine,
