@@ -12,8 +12,8 @@ android {
         applicationId = "dev.bookedition.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.1.0-dev.2"
+        versionCode = 3
+        versionName = "0.1.0-dev.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -37,7 +37,7 @@ android {
     }
 }
 
- dependencies {
+dependencies {
     implementation(project(":game-runtime"))
     implementation(platform("androidx.compose:compose-bom:2025.03.00"))
     implementation("androidx.activity:activity-compose:1.10.1")
