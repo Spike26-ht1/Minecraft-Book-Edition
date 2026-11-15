@@ -21,11 +21,11 @@ The launcher now contains the game runtime as an Android library module:
 4. Choose **JOGAR** to open the voxel test scene.
 5. Use the in-game return button or Android Back to return to the game menu.
 
-The game menu includes a first-pass Configurações dialog. It currently reports the test renderer and platform; detailed graphics controls are not implemented yet.
+The game scene now has a mobile HUD: touch-drag camera look, a directional movement pad, vertical movement, an F3 diagnostic panel and an in-game test menu. The test menu can toggle F3 and controls and cycle camera sensitivity. The F3 panel reports measured FPS/frame time, display size, Android heap and native camera/viewport/vertex data; systems that do not exist yet are not fabricated.
 
 The first scene renders deterministic grass/dirt/stone terrain generated from a 16 × 16 × 16 block section. The Rust mesher removes faces shared by adjacent solid blocks.
 
-**This is not yet a Minecraft-compatible client.** There is no player movement, collision, persistent world, inventory, entities, multiplayer, Bedrock protocol implementation, or official game asset loading.
+**This is not yet a Minecraft-compatible client.** Mobile controls currently move a free camera through the test scene; there is not yet player collision, gravity, grounded jumping, persistent world, inventory, entities, multiplayer, Bedrock protocol implementation or Resource Pack texture loading.
 
 ## Architecture
 
@@ -55,6 +55,6 @@ The GitHub Actions workflow builds the native ARM64 library, runs the Rust check
 
 - Do not reuse code from the abandoned prototype or copy Cinnabar.
 - Cinnabar may be used as an architectural reference only.
-- Do not bundle proprietary Minecraft binaries, assets or credentials.
+- Do not bundle proprietary Minecraft binaries, assets or credentials. Bedrock Samples assets are subject to the Minecraft EULA; see docs/ASSETS_AND_TEXTURES.md.
 - Implement and test Bedrock data/protocol compatibility independently.
 - Keep the launcher as the app entry point and the game runtime embedded within it.
