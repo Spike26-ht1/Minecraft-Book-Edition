@@ -126,12 +126,12 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(9, 14, 23))
         }
         val bridge = NativeBridge()
-        lateinit var hud: GameHud
+        var hud: GameHud? = null
         val surface = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             preserveEGLContextOnPause = false
             setRenderer(BookRenderer(bridge) { currentFps, frameMs ->
-                hud.updateFrame(currentFps, frameMs, bridge.debugInfo())
+                hud?.updateFrame(currentFps, frameMs, bridge.debugInfo())
             })
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         }
@@ -140,8 +140,8 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
-        hud = GameHud(this, root, bridge) { showGameSettings(hud) }
-        hud.attach()
+        hud = GameHud(this, root, bridge) { hud?.let { showGameSettings(it) } }
+        hud?.attach()
         root.addView(label("CENA VOXEL DE TESTE  •  PRÉ-ALPHA", 9f, Color.WHITE, false).apply {
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = rounded(Color.argb(160, 12, 19, 29), dp(10))
