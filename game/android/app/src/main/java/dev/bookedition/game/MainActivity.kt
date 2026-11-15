@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.opengl.EGL14
 import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.util.Base64
@@ -22,6 +23,7 @@ import java.nio.charset.StandardCharsets
 class MainActivity : Activity() {
     private var gameSurface: GLSurfaceView? = null
     private var showingGame = false
+    private var gameRenderer: BookRenderer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,12 +129,16 @@ class MainActivity : Activity() {
         }
         val bridge = NativeBridge()
         var hud: GameHud? = null
+        val initialUncapped = getSharedPreferences("book_settings", MODE_PRIVATE)
+            .getBoolean("uncapped_fps", false)
+        val renderer = BookRenderer(bridge, initialUncapped) { currentFps, frameMs, mode ->
+            hud?.updateFrame(currentFps, frameMs, mode)
+        }
+        gameRenderer = renderer
         val surface = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             preserveEGLContextOnPause = false
-            setRenderer(BookRenderer(bridge) { currentFps, frameMs ->
-                hud?.updateFrame(currentFps, frameMs)
-            })
+            setRenderer(renderer)
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         }
         gameSurface = surface
@@ -168,10 +174,12 @@ class MainActivity : Activity() {
     }
 
     private fun showGameSettings(hud: GameHud) {
+        val currentFpsMode = gameRenderer?.fpsModeLabel ?: "VSync"
         val options = arrayOf(
             "Alternar painel F3",
             "Mostrar / ocultar controles mobile",
             "Ciclo de sensibilidade da câmera",
+            "Limite de FPS: $currentFpsMode",
             "Voltar ao menu principal"
         )
         AlertDialog.Builder(this)
@@ -195,7 +203,19 @@ class MainActivity : Activity() {
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
-                    3 -> returnToMainMenu()
+                    3 -> {
+                        val next = !(gameRenderer?.isUncapped ?: false)
+                        getSharedPreferences("book_settings", MODE_PRIVATE)
+                            .edit().putBoolean("uncapped_fps", next).apply()
+                        gameRenderer?.setUncapped(next)
+                        gameSurface?.queueEvent { gameRenderer?.applyFramePacing() }
+                        android.widget.Toast.makeText(
+                            this,
+                            if (next) "FPS sem limite solicitado" else "VSync ativado",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    4 -> returnToMainMenu()
                 }
             }
             .show()
@@ -204,6 +224,7 @@ class MainActivity : Activity() {
     private fun returnToMainMenu() {
         gameSurface?.onPause()
         gameSurface = null
+        gameRenderer = null
         showingGame = false
         showMainMenu()
     }
@@ -275,8 +296,36 @@ class MainActivity : Activity() {
 
 private class BookRenderer(
     private val bridge: NativeBridge,
-    private val onFrameStats: (Int, Double) -> Unit
+    initialUncapped: Boolean,
+    private val onFrameStats: (Int, Double, String) -> Unit
 ) : GLSurfaceView.Renderer {
+    @Volatile
+    var isUncapped: Boolean = initialUncapped
+        private set
+    @Volatile
+    private var appliedFpsMode = if (initialUncapped) "UNCAP solicitado" else "VSync"
+    val fpsModeLabel: String get() = appliedFpsMode
+
+    fun setUncapped(enabled: Boolean) {
+        isUncapped = enabled
+        appliedFpsMode = if (enabled) "UNCAP solicitado" else "VSync solicitado"
+    }
+
+    fun applyFramePacing() {
+        val display = EGL14.eglGetCurrentDisplay()
+        if (display == EGL14.EGL_NO_DISPLAY) {
+            appliedFpsMode = "EGL indisponível"
+            return
+        }
+        val applied = EGL14.eglSwapInterval(display, if (isUncapped) 0 else 1)
+        appliedFpsMode = when {
+            applied && isUncapped -> "UNCAP (swap 0)"
+            applied -> "VSync (swap 1)"
+            isUncapped -> "UNCAP não suportado"
+            else -> "VSync padrão"
+        }
+    }
+
     private var lastFrameNanos = 0L
     private var statsStartNanos = System.nanoTime()
     private var framesSinceStats = 0
@@ -287,6 +336,7 @@ private class BookRenderer(
         config: javax.microedition.khronos.egl.EGLConfig?
     ) {
         bridge.surfaceCreated()
+        applyFramePacing()
     }
 
     override fun onSurfaceChanged(
@@ -308,7 +358,7 @@ private class BookRenderer(
         val elapsed = now - statsStartNanos
         if (elapsed >= 500_000_000L) {
             val currentFps = (framesSinceStats * 1_000_000_000.0 / elapsed).toInt()
-            onFrameStats(currentFps, lastFrameMs)
+            onFrameStats(currentFps, lastFrameMs, fpsModeLabel)
             framesSinceStats = 0
             statsStartNanos = now
         }
