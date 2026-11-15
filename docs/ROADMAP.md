@@ -23,7 +23,7 @@
 - [ ] Add player collision and gravity.
 - [ ] Add multi-chunk world and cross-chunk neighbor lookup.
 - [ ] Add mesh invalidation and bounded chunk loading.
-- [ ] Add a full pause menu and persistent graphics settings.
+- [x] Add persistent VSync / uncapped FPS selection for the Android renderer.\n- [ ] Add a full pause menu and persistent graphics settings.
 - [ ] Expand F3 with biome, light, targeted block and player/world data as those systems become available.
 
 ## G2 — world foundation
