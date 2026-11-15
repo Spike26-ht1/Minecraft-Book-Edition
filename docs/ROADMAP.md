@@ -1,3 +1,5 @@
+> Status: os itens marcados indicam implementação no código-fonte. A compilação da APK e a validação em aparelho físico continuam pendentes até haver resultados observáveis.
+
 # Game development roadmap
 
 The roadmap below is the source of truth for sequencing work on the game. Each milestone must be built and tested before dependent systems are expanded.
