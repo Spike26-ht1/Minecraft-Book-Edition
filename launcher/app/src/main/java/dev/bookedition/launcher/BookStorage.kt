@@ -39,9 +39,26 @@ internal object StorageLayout {
 internal object BookStorage {
     fun rootPath(context: Context): File = File(context.filesDir, "book-edition")
 
+    fun externalMediaRoot(context: Context): File? =
+        context.getExternalMediaDirs().firstOrNull()?.let { File(it, "book-edition") }
+
     fun initialize(context: Context): File {
         val root = rootPath(context)
         StorageLayout.createDirectories(root)
         return root
+    }
+
+    fun initializeExternalMedia(context: Context): File? {
+        val root = externalMediaRoot(context) ?: return null
+        return runCatching {
+            val folders = listOf("resource-packs", "worlds", "exports", "logs", "cache")
+            if (!root.exists() && !root.mkdirs()) error("Não foi possível criar Android/media.")
+            folders.forEach { name ->
+                val folder = File(root, name)
+                if (!folder.exists() && !folder.mkdirs()) error("Não foi possível criar $name.")
+                if (!folder.isDirectory) error("$name não é um diretório.")
+            }
+            root
+        }.getOrNull()
     }
 }
