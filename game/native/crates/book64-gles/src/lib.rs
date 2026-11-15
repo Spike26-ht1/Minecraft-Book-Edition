@@ -45,6 +45,13 @@ pub struct GlesRenderer {
     started_at: Instant,
     width: i32,
     height: i32,
+    camera_position: Vec3,
+    camera_yaw: f32,
+    camera_pitch: f32,
+    move_forward: f32,
+    move_strafe: f32,
+    move_vertical: f32,
+    last_frame: Instant,
 }
 
 impl GlesRenderer {
@@ -148,6 +155,13 @@ impl GlesRenderer {
             started_at: Instant::now(),
             width: 1,
             height: 1,
+            camera_position: Vec3::new(22.0, 18.0, 25.0),
+            camera_yaw: -0.576,
+            camera_pitch: -0.49,
+            move_forward: 0.0,
+            move_strafe: 0.0,
+            move_vertical: 0.0,
+            last_frame: Instant::now(),
         })
     }
 
@@ -165,15 +179,26 @@ impl GlesRenderer {
     ///
     /// # Safety
     /// A valid OpenGL ES context must be current on the calling thread.
-    pub unsafe fn draw(&self) {
+    pub unsafe fn draw(&mut self) {
+        let now = Instant::now();
+        let delta_seconds = (now - self.last_frame).as_secs_f32().clamp(0.0, 0.1);
+        self.last_frame = now;
+        let forward = self.camera_front();
+        let right = forward.cross(Vec3::Y).normalize_or_zero();
+        let movement = forward * self.move_forward
+            + right * self.move_strafe
+            + Vec3::Y * self.move_vertical;
+        self.camera_position += movement * (6.0 * delta_seconds);
+
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         gl::UseProgram(self.program);
 
         let aspect = self.width as f32 / self.height as f32;
         let projection = Mat4::perspective_rh_gl(48.0_f32.to_radians(), aspect, 0.1, 100.0);
+        let front = self.camera_front();
         let view = Mat4::look_at_rh(
-            Vec3::new(22.0, 18.0, 25.0),
-            Vec3::new(8.0, 2.5, 8.0),
+            self.camera_position,
+            self.camera_position + front,
             Vec3::Y,
         );
         let angle = self.started_at.elapsed().as_secs_f32() * 0.12;
@@ -196,6 +221,40 @@ impl GlesRenderer {
 
     pub fn vertex_count(&self) -> usize {
         self.vertex_count as usize
+    }
+
+    pub fn set_movement(&mut self, forward: f32, strafe: f32, vertical: f32) {
+        self.move_forward = forward.clamp(-1.0, 1.0);
+        self.move_strafe = strafe.clamp(-1.0, 1.0);
+        self.move_vertical = vertical.clamp(-1.0, 1.0);
+    }
+
+    pub fn rotate_camera(&mut self, yaw_delta: f32, pitch_delta: f32) {
+        self.camera_yaw += yaw_delta;
+        self.camera_pitch = (self.camera_pitch + pitch_delta).clamp(-1.45, 1.45);
+    }
+
+    pub fn debug_info(&self) -> String {
+        format!(
+            "XYZ: {:.2}, {:.2}, {:.2}\nYaw/Pitch: {:.2} / {:.2}\nViewport: {} × {}\nVertices: {}",
+            self.camera_position.x,
+            self.camera_position.y,
+            self.camera_position.z,
+            self.camera_yaw.to_degrees(),
+            self.camera_pitch.to_degrees(),
+            self.width,
+            self.height,
+            self.vertex_count
+        )
+    }
+
+    fn camera_front(&self) -> Vec3 {
+        Vec3::new(
+            self.camera_yaw.cos() * self.camera_pitch.cos(),
+            self.camera_pitch.sin(),
+            self.camera_yaw.sin() * self.camera_pitch.cos(),
+        )
+        .normalize_or_zero()
     }
 }
 
