@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/book-core",
+    "crates/book64-gles",
+    "crates/book-android",
+]
+default-members = [
+    "crates/book-core",
+    "crates/book64-gles",
+    "crates/book-android",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Spike26-ht1/Minecraft-Book-Edition"
+
+[workspace.dependencies]
+glam = "0.30"
+gl = "0.14"
+jni = "0.21"
