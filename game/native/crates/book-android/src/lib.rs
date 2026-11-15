@@ -6,7 +6,7 @@ mod android {
     use std::sync::{Mutex, OnceLock};
 
     use book64_gles::GlesRenderer;
-    use jni::objects::{JObject, JString};
+    use jni::objects::JObject;
     use jni::sys::{jfloat, jint, jstring};
     use jni::JNIEnv;
 
@@ -123,9 +123,10 @@ mod android {
             .map(|renderer| renderer.debug_info())
             .unwrap_or_else(|| "Book64 renderer not initialized".to_owned());
 
-        env.new_string(info)
-            .map(JString::into_raw)
-            .unwrap_or(std::ptr::null_mut())
+        match env.new_string(info) {
+            Ok(value) => value.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
     }
 }
 
