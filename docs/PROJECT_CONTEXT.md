@@ -4,10 +4,10 @@
 Criar um projeto independente chamado Minecraft Book Edition, aberto, documentado e fácil de entender para desenvolvedores e modders. O foco inicial é estabelecer uma base de launcher Android e, em seguida, avançar na integração/execução do Minecraft Bedrock.
 
 ## Prioridades
-1. Desenvolver e validar primeiro o launcher Android.
-2. Definir e implementar a estratégia de integração do cliente Bedrock.
-3. Deixar Book64, APIs de mods e Book Loader para etapas posteriores.
-4. Mods não são prioridade nesta fase.
+1. Evoluir o cliente/jogo independente e o motor Book64, mantendo o launcher como entrada única.
+2. Validar cada build Android ARM64 em CI e em dispositivo físico.
+3. Definir e implementar compatibilidade Bedrock por etapas, sem copiar o cliente oficial.
+4. Deixar APIs de mods e Book Loader para etapas posteriores.
 
 ## Plataforma e tecnologia
 - Android ARM64 é a primeira plataforma-alvo.
@@ -53,7 +53,7 @@ Definir se o cliente Bedrock será um cliente independente implementado para com
 - Não declarar builds ou testes como concluídos sem execução real.
 - Manter documentação clara e incremental.
 
-## Launcher — versão 0.1.0-dev.2
+## Launcher — histórico da fundação 0.1.0-dev.2
 A build de testes do launcher inclui:
 - Navegação entre Início, Versões, Ajustes e Logs.
 - Tema claro/escuro com preferência persistente.
@@ -73,6 +73,11 @@ A build não inclui cliente Bedrock, autenticação, instalação de versões de
 - O botão Jogar do launcher inicia `dev.bookedition.game.MainActivity` por Intent explícito.
 - O menu do jogo aparece antes da cena: Jogar, Configurações e Sair.
 - A cena voxel de teste só é criada depois da seleção de Jogar no menu do jogo.
+- A cena tem HUD mobile com câmera por toque, direcional, movimento vertical e botão de menu.
+- O painel F3 inicial mede FPS/frame time, resolução, heap Android e telemetria nativa de câmera/viewport/vértices.
+- O menu de teste alterna F3 e controles e permite ajustar a sensibilidade.
+- Os controles atuais movimentam uma câmera livre; física, colisão, gravidade e pulo com chão ainda não existem.
+- A integração de texturas Bedrock Samples depende de leitor de Resource Pack e assets fornecidos pelo usuário; os arquivos proprietários da Mojang não serão copiados para o repositório ou APK.
 - Branch de integração: `launcher/game-integration`.
 - As branches `launcher/foundation` e `game/clean-foundation` permanecem preservadas.
 - A compilação CI deve gerar um único APK debug com launcher + jogo, ABI arm64-v8a.
