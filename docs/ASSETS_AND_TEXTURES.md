@@ -2,22 +2,30 @@
 
 ## Referência Bedrock Samples
 
-O repositório [Mojang/bedrock-samples](https://github.com/Mojang/bedrock-samples) é a referência oficial para a estrutura de Resource Packs e exemplos de conteúdo Bedrock. A pasta `resource_pack/` contém definições, manifestos e referências de texturas.
+O repositório [Mojang/bedrock-samples](https://github.com/Mojang/bedrock-samples) orienta a estrutura de Resource Packs Bedrock. O Book Edition implementa um leitor próprio e não incorpora assets Mojang no APK.
 
-## Regra de distribuição
+## Importador implementado
 
-O `LICENSE.md` do repositório informa que os arquivos estão sujeitos ao Minecraft End User License Agreement (EULA); não é uma licença permissiva como MIT ou Apache. Por isso, este repositório Book Edition não copia nem distribui os PNGs, sons, modelos ou outros assets proprietários da Mojang dentro do código-fonte ou do APK.
+A partir de dev.6, o menu de configurações do jogo oferece **Importar Resource Pack (.mcpack / .zip)**.
+
+O importador atual:
+- Abre arquivos escolhidos pelo usuário via Android Storage Access Framework.
+- Valida a presença de manifest.json e textures/terrain_texture.json.
+- Lê texture_data, incluindo caminhos diretos, arrays e objetos com path/textures.
+- Resolve imagens PNG referenciadas, gera terrain-atlas.png e atlas-index.json no armazenamento privado.
+- Registra nomes, contagem de texturas resolvidas/ausentes e dimensões para o painel F3.
+- Impõe limites de tamanho, quantidade de entradas, dimensão individual e tamanho do atlas para reduzir risco de arquivos malformados.
+
+Limitações conhecidas:
+- Esta etapa gera e indexa o atlas no armazenamento privado; ainda não envia a textura à GPU nem troca os UVs do mesh. A cena continua renderizando com cores por vértice.
+- O leitor ainda não processa flipbook_textures.json, materiais, animações, tintas de bioma, geometria de blocos, render controllers ou todos os esquemas alternativos de terrain_texture.
+- Um atlas que ultrapasse 2048×4096 é rejeitado; suporte a múltiplas páginas ainda será implementado.
+- Não há promessa de compatibilidade com todos os packs ou versões Bedrock nesta etapa.
+
+## Distribuição e licenças
+
+O conteúdo de Mojang/bedrock-samples está sujeito aos termos indicados pelo próprio repositório e pelo Minecraft EULA; não é tratado como conteúdo MIT/Apache. O projeto não copia nem redistribui PNGs, sons, modelos ou outros assets proprietários. Os packs selecionados pelo usuário permanecem localmente no dispositivo.
 
 Referências:
 - [Bedrock Samples — LICENSE.md](https://github.com/Mojang/bedrock-samples/blob/main/LICENSE.md)
 - [Minecraft EULA](https://www.minecraft.net/en-us/eula)
-
-## Plano técnico para texturas
-
-1. Implementar um leitor próprio de Resource Pack, começando por `manifest.json`, `textures/terrain_texture.json` e atlas de blocos.
-2. Permitir que o usuário selecione arquivos locais por meio do seletor de documentos do Android.
-3. Validar dimensões, nomes e referências do atlas antes de enviar dados à GPU.
-4. Manter os assets selecionados no armazenamento privado do app, sem enviá-los ao GitHub ou a servidores.
-5. Criar texturas originais de teste para desenvolvimento e CI, com licença compatível e autoria documentada.
-
-O renderer atual ainda usa cores por vértice. A integração de texturas reais depende do leitor de atlas e do novo layout de vértices com UVs; não será simulada com cores fixas nem declarada pronta antes dos testes.
