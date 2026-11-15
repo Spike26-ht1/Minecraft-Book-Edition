@@ -113,6 +113,14 @@ class MainActivity : Activity() {
     }
 
     private fun startGameScene() {
+        if (!NativeBridge.available) {
+            AlertDialog.Builder(this)
+                .setTitle("Motor gráfico indisponível")
+                .setMessage("A biblioteca nativa Book64 não foi carregada. Esta instalação não contém o runtime ARM64 necessário.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
         showingGame = true
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(9, 14, 23))
