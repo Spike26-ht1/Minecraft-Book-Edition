@@ -19,6 +19,14 @@
 - Block-face UVs and basic terrain material.
 - World generation and a small test world.
 
+## Pre-Alpha 1.2.1 — Android runtime diagnostics
+
+- [x] Resolve the media/resource-pack directory from the actual Android application ID, including side-by-side diagnostic package IDs.
+- [x] Add regression tests for normal, suffixed, and malformed Android package paths.
+- [x] Record long update and render/present stalls with per-stage timings.
+- [ ] Use collected device logs to isolate and fix the reported periodic freeze.
+- [ ] Verify an extracted resource pack loads on a physical Android device.
+
 ## Later
 
 - World save/load.
