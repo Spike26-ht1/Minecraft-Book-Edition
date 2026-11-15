@@ -195,9 +195,8 @@ impl GlesRenderer {
         self.last_frame = now;
         let forward = self.camera_front();
         let right = forward.cross(Vec3::Y).normalize_or_zero();
-        let movement = forward * self.move_forward
-            + right * self.move_strafe
-            + Vec3::Y * self.move_vertical;
+        let movement =
+            forward * self.move_forward + right * self.move_strafe + Vec3::Y * self.move_vertical;
         self.camera_position += movement * (6.0 * delta_seconds);
 
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -206,11 +205,7 @@ impl GlesRenderer {
         let aspect = self.width as f32 / self.height as f32;
         let projection = Mat4::perspective_rh_gl(48.0_f32.to_radians(), aspect, 0.1, 100.0);
         let front = self.camera_front();
-        let view = Mat4::look_at_rh(
-            self.camera_position,
-            self.camera_position + front,
-            Vec3::Y,
-        );
+        let view = Mat4::look_at_rh(self.camera_position, self.camera_position + front, Vec3::Y);
         let angle = self.started_at.elapsed().as_secs_f32() * 0.12;
         let model = Mat4::from_translation(Vec3::new(8.0, 3.0, 8.0))
             * Mat4::from_rotation_y(angle)
@@ -324,7 +319,9 @@ unsafe fn shader_log(shader: u32) -> String {
 
     let mut buffer = vec![0_i8; length as usize];
     gl::GetShaderInfoLog(shader, length, ptr::null_mut(), buffer.as_mut_ptr());
-    CStr::from_ptr(buffer.as_ptr())\n        .to_string_lossy()\n        .into_owned()
+    CStr::from_ptr(buffer.as_ptr())
+        .to_string_lossy()
+        .into_owned()
 }
 
 unsafe fn program_log(program: u32) -> String {
@@ -336,7 +333,9 @@ unsafe fn program_log(program: u32) -> String {
 
     let mut buffer = vec![0_i8; length as usize];
     gl::GetProgramInfoLog(program, length, ptr::null_mut(), buffer.as_mut_ptr());
-    CStr::from_ptr(buffer.as_ptr()).to_string_lossy().into_owned()
+    CStr::from_ptr(buffer.as_ptr())
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[cfg(test)]
