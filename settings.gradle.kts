@@ -6,4 +6,5 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "MinecraftBookEdition"
-include(":launcher:app")
+include(":launcher:app", ":game-runtime")
+project(":game-runtime").projectDir = file("game/android/app")
