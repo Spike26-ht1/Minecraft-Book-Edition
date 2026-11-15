@@ -33,6 +33,7 @@ internal class GameHud(
     private var fps = 0
     private var frameMs = 0.0
     private var nativeInfo = "Book64 initializing"
+    private var fpsMode = "VSync"
 
     fun attach() {
         val lookSurface = View(activity).apply {
@@ -122,9 +123,10 @@ internal class GameHud(
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
-    fun updateFrame(currentFps: Int, currentFrameMs: Double) {
+    fun updateFrame(currentFps: Int, currentFrameMs: Double, currentFpsMode: String) {
         fps = currentFps
         frameMs = currentFrameMs
+        fpsMode = currentFpsMode
         if (!debugVisible) return
         nativeInfo = bridge.debugInfo()
         val metrics = activity.resources.displayMetrics
@@ -133,8 +135,8 @@ internal class GameHud(
         val totalMb = runtime.totalMemory() / (1024L * 1024L)
         val report = String.format(
             Locale.US,
-            "BOOK EDITION DEBUG\nFPS: %d  |  Frame: %.2f ms\nRenderer: Book64 / OpenGL ES 3.0\nDevice: %s %s\nAndroid: %s (API %d)\nDisplay: %d × %d  |  Density: %.2f\nHeap: %d / %d MB\nWorld: local voxel test scene\nChunk system: 16 × 16 × 16 section\n%s",
-            fps, frameMs, Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE,
+            "BOOK EDITION DEBUG\nFPS: %d  |  Frame CPU: %.2f ms\nFPS mode: %s\nRenderer: Book64 / OpenGL ES 3.0\nDevice: %s %s\nAndroid: %s (API %d)\nDisplay: %d × %d  |  Density: %.2f\nHeap: %d / %d MB\nWorld: local voxel test scene\nChunk system: 16 × 16 × 16 section\n%s",
+            fps, frameMs, fpsMode, Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE,
             Build.VERSION.SDK_INT, metrics.widthPixels, metrics.heightPixels, metrics.density,
             usedMb, totalMb, nativeInfo
         )
@@ -144,7 +146,7 @@ internal class GameHud(
     fun toggleDebug() {
         debugVisible = !debugVisible
         debugPanel.visibility = if (debugVisible) View.VISIBLE else View.GONE
-        if (debugVisible) updateFrame(fps, frameMs)
+        if (debugVisible) updateFrame(fps, frameMs, fpsMode)
     }
 
     fun toggleControls(): Boolean {
