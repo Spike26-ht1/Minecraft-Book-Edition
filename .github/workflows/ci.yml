@@ -75,8 +75,8 @@ jobs:
       - name: Configure side-by-side fullscreen test package
         run: |
           sed -i 's/com.spike26.minecraftbookedition/com.spike26.minecraftbookedition.fullscreenfix/g' crates/book-client/Cargo.toml crates/book-client/src/lib.rs
-          sed -i 's/Minecraft Book Edition Pre-Alpha 1.2.0/Minecraft Book Edition Fullscreen Fix Test/' crates/book-client/Cargo.toml
-      - name: Build Android ARM64 fullscreen-fix test APK
+          sed -i 's/Minecraft Book Edition Pre-Alpha 1.2.1/Minecraft Book Edition Pre-Alpha 1.2.1 Diagnostic Test/' crates/book-client/Cargo.toml
+      - name: Build Android ARM64 Pre-Alpha 1.2.1 diagnostic APK
         run: cargo apk build -p book-client --lib --target aarch64-linux-android
       - name: Validate Android APK
         run: |
