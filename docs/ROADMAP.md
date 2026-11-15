@@ -2,36 +2,40 @@
 
 The roadmap below is the source of truth for sequencing work on the game. Each milestone must be built and tested before dependent systems are expanded.
 
-## G0 — clean runtime and graphics proof
+## G0 — clean runtime and voxel-rendering proof
 
 - [x] Create a new game-only development branch.
 - [x] Keep the existing launcher branch separate.
 - [x] Create an Android ARM64 game host in landscape/fullscreen.
 - [x] Display the supplied Book Edition artwork in the game app.
 - [x] Establish the Rust/JNI boundary.
-- [x] Establish Book64 with an OpenGL ES 3.0 diagnostic scene.
+- [x] Create a compact 16 × 16 × 16 block section.
+- [x] Generate deterministic grass/dirt/stone test terrain.
+- [x] Mesh visible faces and remove faces shared by adjacent solid blocks.
+- [x] Render the voxel test terrain with Book64/OpenGL ES 3.0.
 - [ ] Verify the APK on a physical Android device.
 
 ## G1 — deterministic game foundation
 
 - [ ] Define the main game loop and fixed-step simulation clock.
 - [ ] Define input actions independently from Android touch controls.
-- [ ] Add tests for world coordinates, chunk coordinates and block addressing.
+- [ ] Expand tests for world coordinates, block addressing and section boundaries.
 - [ ] Add structured game logs and safe export for diagnostics.
 - [ ] Establish resource ownership and lifecycle behavior across Activity pause/resume.
+- [ ] Add cross-chunk neighbor lookup and mesh invalidation.
 
-## G2 — world and block model
+## G2 — world systems
 
-- [ ] Define block identifiers and immutable block definitions.
-- [ ] Define chunk/section storage and versioned serialization.
-- [ ] Implement deterministic terrain fixtures for tests.
-- [ ] Add chunk meshing with neighbor-aware face visibility.
+- [ ] Define immutable block definitions and block properties.
+- [ ] Add versioned chunk serialization.
+- [ ] Replace the test terrain fixture with a configurable terrain generator.
 - [ ] Add bounded chunk streaming and unloading before increasing world size.
+- [ ] Add biome data and lighting propagation.
 
 ## G3 — graphics evolution
 
-- [ ] Replace the diagnostic cube with world geometry.
-- [ ] Add camera, depth, frustum culling and GPU resource lifetime management.
+- [ ] Add camera controls and player input.
+- [ ] Add frustum culling, render-distance management and GPU resource lifetime handling.
 - [ ] Add texture atlas loading for user-supplied test assets.
 - [ ] Profile CPU, GPU and frame pacing on the target Android device.
 - [ ] Keep Vulkan as a later backend behind the same Book64 renderer boundary.
