@@ -127,12 +127,7 @@ pub fn build_chunk_mesh(chunk: &Chunk) -> ChunkMesh {
     mesh
 }
 
-fn append_face(
-    output: &mut Vec<MeshVertex>,
-    block_position: [i32; 3],
-    block: BlockId,
-    face: Face,
-) {
+fn append_face(output: &mut Vec<MeshVertex>, block_position: [i32; 3], block: BlockId, face: Face) {
     let base_color = block.debug_color();
     let indices = [0_usize, 1, 2, 0, 2, 3];
 
