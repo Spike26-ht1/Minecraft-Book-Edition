@@ -1,11 +1,11 @@
 # Minecraft Book Edition — contexto do projeto
 
 ## Objetivo
-Criar um projeto independente chamado Minecraft Book Edition, aberto, documentado e fácil de entender para desenvolvedores e modders. O foco inicial é uma integração funcional com Minecraft Bedrock.
+Criar um projeto independente chamado Minecraft Book Edition, aberto, documentado e fácil de entender para desenvolvedores e modders. O foco inicial é estabelecer uma base de launcher Android e, em seguida, avançar na integração/execução do Minecraft Bedrock.
 
 ## Prioridades
-1. Desenvolver primeiro o launcher Android.
-2. Depois avançar na integração/execução do cliente Bedrock.
+1. Desenvolver e validar primeiro o launcher Android.
+2. Definir e implementar a estratégia de integração do cliente Bedrock.
 3. Deixar Book64, APIs de mods e Book Loader para etapas posteriores.
 4. Mods não são prioridade nesta fase.
 
@@ -23,12 +23,12 @@ Criar um projeto independente chamado Minecraft Book Edition, aberto, documentad
 - minecraft/: componentes e dados do cliente, recursos, bibliotecas e runtime.
 - crates/: componentes Rust reutilizáveis.
 - android/launcher/: integração Android do launcher.
-- android/médias/: diretório reservado para mídias do projeto.
+- android/media/: diretório reservado para mídias do projeto.
 - docs/: documentação de arquitetura, decisões e desenvolvimento.
 - tests/: testes.
 
 ## Dados privados no Android
-Os dados de execução devem ficar no armazenamento privado do aplicativo, separados do código-fonte:
+Os dados de execução ficam no armazenamento privado do aplicativo, separados do código-fonte:
 - launcher/settings/
 - launcher/logs/
 - launcher/versions/
@@ -38,7 +38,7 @@ Os dados de execução devem ficar no armazenamento privado do aplicativo, separ
 - minecraft/worlds/
 - minecraft/cache/
 
-O launcher deverá centralizar os logs do launcher e do cliente, registrar inicialização, versão, dispositivo, falhas e encerramento, e permitir exportação manual de relatórios. Não haverá upload automático de logs.
+O launcher centraliza os logs, registra inicialização e eventos selecionados e permite exportação manual de relatórios. Não há upload automático de logs.
 
 ## Referência arquitetural: Cinnabar
 O Cinnabar foi estudado como referência de organização e separação de componentes. Suas ideias podem inspirar a arquitetura, mas o Book Edition terá implementação própria. Não copiar código do Cinnabar. Verificar licenças de dependências individualmente.
@@ -53,5 +53,13 @@ Definir se o cliente Bedrock será um cliente independente implementado para com
 - Não declarar builds ou testes como concluídos sem execução real.
 - Manter documentação clara e incremental.
 
-## Launcher — primeira entrega
-A primeira base usa Kotlin + Jetpack Compose + Material 3. A tela inicial é um esqueleto de interface; o botão Jogar ainda não inicia o cliente. Próximas etapas: navegação, configurações, gestão de versões e sistema de logs.
+## Launcher — versão 0.1.0-dev.2
+A build de testes do launcher inclui:
+- Navegação entre Início, Versões, Ajustes e Logs.
+- Tema claro/escuro com preferência persistente.
+- Opção para registrar eventos detalhados localmente.
+- Criação de diretórios privados para configurações, versões, recursos e mundos.
+- Visualização e exportação manual dos logs.
+- Botão Jogar desativado enquanto o cliente Bedrock não estiver integrado.
+
+A build não inclui cliente Bedrock, autenticação, instalação de versões de jogo ou execução de mundos. O APK de depuração é produzido pelo workflow do GitHub Actions e não é uma versão de distribuição final.
