@@ -21,7 +21,7 @@ The launcher now contains the game runtime as an Android library module:
 4. Choose **JOGAR** to open the voxel test scene.
 5. Use the in-game return button or Android Back to return to the game menu.
 
-The game scene now has a mobile HUD: touch-drag camera look, a directional movement pad, vertical movement, an F3 diagnostic panel and an in-game test menu. The test menu can toggle F3 and controls and cycle camera sensitivity. The F3 panel reports measured FPS/frame time, display size, Android heap and native camera/viewport/vertex data; systems that do not exist yet are not fabricated.
+The game scene supports a persistent VSync/uncapped FPS selection. Uncapped mode requests EGL swap interval 0 and the F3 panel reports the active pacing mode and measured CPU frame interval. The Android compositor and display may still cap visible presentation.\n\nThe game scene now has a mobile HUD: touch-drag camera look, a directional movement pad, vertical movement, an F3 diagnostic panel and an in-game test menu. The test menu can toggle F3 and controls and cycle camera sensitivity. The F3 panel reports measured FPS/frame time, display size, Android heap and native camera/viewport/vertex data; systems that do not exist yet are not fabricated.
 
 The first scene renders deterministic grass/dirt/stone terrain generated from a 16 × 16 × 16 block section. The Rust mesher removes faces shared by adjacent solid blocks.
 
