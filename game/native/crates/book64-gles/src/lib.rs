@@ -1,13 +1,15 @@
-//! First Book64 backend: OpenGL ES 3.0 diagnostic renderer.
+//! First Book64 backend: OpenGL ES 3.0 voxel renderer.
 //!
-//! The renderer deliberately draws only a diagnostic cube. World rendering,
-//! textures and materials will be added in later milestones.
+//! This milestone draws a deterministic test chunk with grass, dirt and stone.
+//! It is a renderer proof, not the final terrain or block system.
 
 use std::ffi::{c_void, CStr, CString};
 use std::mem::size_of;
 use std::ptr;
 use std::time::Instant;
 
+use book_meshing::build_chunk_mesh;
+use book_world::Chunk;
 use glam::{Mat4, Vec3};
 
 const VERTEX_SHADER: &str = r#"#version 300 es
@@ -30,7 +32,7 @@ void main() {
 }
 "#;
 
-/// Owns the GPU resources for the Book64 GLES diagnostic scene.
+/// Owns the GPU resources for the Book64 voxel test scene.
 ///
 /// All methods must be called on the thread where the current EGL context is
 /// bound. The Android host guarantees this by calling them from GLSurfaceView.
@@ -39,13 +41,14 @@ pub struct GlesRenderer {
     vertex_array: u32,
     vertex_buffer: u32,
     mvp_location: i32,
+    vertex_count: i32,
     started_at: Instant,
     width: i32,
     height: i32,
 }
 
 impl GlesRenderer {
-    /// Loads GLES entry points and creates the diagnostic cube resources.
+    /// Loads GLES entry points and uploads the first generated voxel chunk.
     ///
     /// # Safety
     /// A valid OpenGL ES 3.0 context must be current on the calling thread.
@@ -89,7 +92,20 @@ impl GlesRenderer {
             return Err("Book64 could not locate the u_mvp uniform".to_owned());
         }
 
-        let vertices = cube_vertices();
+        let chunk = Chunk::generate_test_terrain();
+        let mesh = build_chunk_mesh(&chunk);
+        if mesh.is_empty() {
+            gl::DeleteProgram(program);
+            return Err("The test chunk produced an empty mesh".to_owned());
+        }
+
+        let mut vertices = Vec::with_capacity(mesh.vertex_count() * 6);
+        for vertex in mesh.vertices {
+            vertices.extend_from_slice(&vertex.position);
+            vertices.extend_from_slice(&vertex.color);
+        }
+        let vertex_count = (vertices.len() / 6) as i32;
+
         let mut vertex_array = 0;
         let mut vertex_buffer = 0;
 
@@ -128,6 +144,7 @@ impl GlesRenderer {
             vertex_array,
             vertex_buffer,
             mvp_location,
+            vertex_count,
             started_at: Instant::now(),
             width: 1,
             height: 1,
@@ -144,7 +161,7 @@ impl GlesRenderer {
         gl::Viewport(0, 0, self.width, self.height);
     }
 
-    /// Renders one animated diagnostic frame.
+    /// Renders one animated voxel terrain frame.
     ///
     /// # Safety
     /// A valid OpenGL ES context must be current on the calling thread.
@@ -153,14 +170,16 @@ impl GlesRenderer {
         gl::UseProgram(self.program);
 
         let aspect = self.width as f32 / self.height as f32;
-        let projection = Mat4::perspective_rh_gl(45.0_f32.to_radians(), aspect, 0.1, 100.0);
+        let projection = Mat4::perspective_rh_gl(48.0_f32.to_radians(), aspect, 0.1, 100.0);
         let view = Mat4::look_at_rh(
-            Vec3::new(3.1, 2.35, 4.5),
-            Vec3::ZERO,
+            Vec3::new(22.0, 18.0, 25.0),
+            Vec3::new(8.0, 2.5, 8.0),
             Vec3::Y,
         );
-        let angle = self.started_at.elapsed().as_secs_f32() * 0.55;
-        let model = Mat4::from_rotation_y(angle) * Mat4::from_rotation_x(-0.28);
+        let angle = self.started_at.elapsed().as_secs_f32() * 0.12;
+        let model = Mat4::from_translation(Vec3::new(8.0, 3.0, 8.0))
+            * Mat4::from_rotation_y(angle)
+            * Mat4::from_translation(Vec3::new(-8.0, -3.0, -8.0));
         let mvp = projection * view * model;
 
         gl::UniformMatrix4fv(
@@ -170,22 +189,21 @@ impl GlesRenderer {
             mvp.to_cols_array().as_ptr(),
         );
         gl::BindVertexArray(self.vertex_array);
-        gl::DrawArrays(gl::TRIANGLES, 0, 36);
+        gl::DrawArrays(gl::TRIANGLES, 0, self.vertex_count);
         gl::BindVertexArray(0);
         gl::UseProgram(0);
     }
 
-    /// Returns the number of vertices in the diagnostic mesh.
-    pub const fn diagnostic_vertex_count() -> usize {
-        36
+    pub fn vertex_count(&self) -> usize {
+        self.vertex_count as usize
     }
 }
 
 impl Drop for GlesRenderer {
     fn drop(&mut self) {
         // GPU cleanup is intentionally handled by the Android lifecycle in a
-        // later resource-owner milestone, when EGL context-loss handling lands.
-        // Deleting here could call GLES after the surface context has vanished.
+        // later resource-owner milestone. Deleting here could call GLES after
+        // the EGL context has already been lost.
         let _ = (self.program, self.vertex_array, self.vertex_buffer);
     }
 }
@@ -235,71 +253,16 @@ unsafe fn program_log(program: u32) -> String {
     CStr::from_ptr(buffer.as_ptr()).to_string_lossy().into_owned()
 }
 
-fn cube_vertices() -> Vec<f32> {
-    let mut output = Vec::with_capacity(36 * 6);
-    let faces = [
-        ([
-            [-1.0, -1.0, 1.0],
-            [1.0, -1.0, 1.0],
-            [1.0, 1.0, 1.0],
-            [-1.0, 1.0, 1.0],
-        ], [0.28, 0.72, 0.36]),
-        ([
-            [1.0, -1.0, -1.0],
-            [-1.0, -1.0, -1.0],
-            [-1.0, 1.0, -1.0],
-            [1.0, 1.0, -1.0],
-        ], [0.35, 0.52, 0.84]),
-        ([
-            [-1.0, -1.0, -1.0],
-            [-1.0, -1.0, 1.0],
-            [-1.0, 1.0, 1.0],
-            [-1.0, 1.0, -1.0],
-        ], [0.78, 0.48, 0.27]),
-        ([
-            [1.0, -1.0, 1.0],
-            [1.0, -1.0, -1.0],
-            [1.0, 1.0, -1.0],
-            [1.0, 1.0, 1.0],
-        ], [0.75, 0.68, 0.30]),
-        ([
-            [-1.0, 1.0, 1.0],
-            [1.0, 1.0, 1.0],
-            [1.0, 1.0, -1.0],
-            [-1.0, 1.0, -1.0],
-        ], [0.34, 0.70, 0.76]),
-        ([
-            [-1.0, -1.0, -1.0],
-            [1.0, -1.0, -1.0],
-            [1.0, -1.0, 1.0],
-            [-1.0, -1.0, 1.0],
-        ], [0.56, 0.48, 0.76]),
-    ];
-
-    for (corners, color) in faces {
-        for index in [0_usize, 1, 2, 0, 2, 3] {
-            output.extend_from_slice(&corners[index]);
-            output.extend_from_slice(&color);
-        }
-    }
-
-    output
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn diagnostic_cube_contains_six_triangles_per_face() {
-        assert_eq!(GlesRenderer::diagnostic_vertex_count(), 36);
-        assert_eq!(cube_vertices().len(), 36 * 6);
-    }
+    fn generated_test_chunk_has_visible_voxel_geometry() {
+        let chunk = Chunk::generate_test_terrain();
+        let mesh = build_chunk_mesh(&chunk);
 
-    #[test]
-    fn every_vertex_has_position_and_color_components() {
-        let vertices = cube_vertices();
-        assert_eq!(vertices.len() % 6, 0);
-        assert!(vertices.iter().all(|component| component.is_finite()));
+        assert!(!mesh.is_empty());
+        assert_eq!(mesh.vertex_count() % 3, 0);
     }
 }
