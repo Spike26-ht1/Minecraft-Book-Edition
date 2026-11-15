@@ -1,0 +1,75 @@
+name: Book Edition Launcher + Game — Android ARM64
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - launcher/game-integration
+    paths:
+      - "game/**"
+      - "launcher/**"
+      - "settings.gradle.kts"
+      - "build.gradle.kts"
+      - "docs/**"
+      - ".github/workflows/game-android.yml"
+      - "README.md"
+
+permissions:
+  contents: read
+
+jobs:
+  android-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android SDK and NDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018"
+
+      - name: Export Android NDK path for cargo-ndk
+        run: echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Install Rust and Android target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: aarch64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Run Rust tests
+        working-directory: game/native
+        run: cargo test --workspace
+
+      - name: Check Rust formatting
+        working-directory: game/native
+        run: cargo fmt --all -- --check
+
+      - name: Build native Android library
+        working-directory: game/native
+        run: cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release -p book-android
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Assemble Android test APK
+        run: gradle --no-daemon :launcher:app:assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-edition-launcher-game-arm64-dev-1
+          path: launcher/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
