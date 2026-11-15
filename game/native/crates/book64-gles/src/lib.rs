@@ -52,6 +52,9 @@ pub struct GlesRenderer {
     move_strafe: f32,
     move_vertical: f32,
     last_frame: Instant,
+    gpu_vendor: String,
+    gpu_renderer: String,
+    gles_version: String,
 }
 
 impl GlesRenderer {
@@ -67,6 +70,10 @@ impl GlesRenderer {
         if !gl::CreateShader::is_loaded() || !gl::GenVertexArrays::is_loaded() {
             return Err("OpenGL ES 3.0 entry points are unavailable".to_owned());
         }
+
+        let gpu_vendor = gl_string(gl::VENDOR);
+        let gpu_renderer = gl_string(gl::RENDERER);
+        let gles_version = gl_string(gl::VERSION);
 
         let vertex_shader = compile_shader(gl::VERTEX_SHADER, VERTEX_SHADER)?;
         let fragment_shader = match compile_shader(gl::FRAGMENT_SHADER, FRAGMENT_SHADER) {
@@ -162,6 +169,9 @@ impl GlesRenderer {
             move_strafe: 0.0,
             move_vertical: 0.0,
             last_frame: Instant::now(),
+            gpu_vendor,
+            gpu_renderer,
+            gles_version,
         })
     }
 
@@ -236,15 +246,24 @@ impl GlesRenderer {
 
     pub fn debug_info(&self) -> String {
         format!(
-            "XYZ: {:.2}, {:.2}, {:.2}\nYaw/Pitch: {:.2} / {:.2}\nViewport: {} × {}\nVertices: {}",
+            "XYZ: {:.2}, {:.2}, {:.2}\nBlock: {}, {}, {}\nChunk: {}, {}, {}\nYaw/Pitch: {:.2} / {:.2}\nViewport: {} × {}\nVertices: {}\nGPU vendor: {}\nGPU: {}\nGLES: {}",
             self.camera_position.x,
             self.camera_position.y,
             self.camera_position.z,
+            self.camera_position.x.floor() as i32,
+            self.camera_position.y.floor() as i32,
+            self.camera_position.z.floor() as i32,
+            (self.camera_position.x.floor() as i32).div_euclid(16),
+            (self.camera_position.y.floor() as i32).div_euclid(16),
+            (self.camera_position.z.floor() as i32).div_euclid(16),
             self.camera_yaw.to_degrees(),
             self.camera_pitch.to_degrees(),
             self.width,
             self.height,
-            self.vertex_count
+            self.vertex_count,
+            self.gpu_vendor,
+            self.gpu_renderer,
+            self.gles_version
         )
     }
 
@@ -265,6 +284,14 @@ impl Drop for GlesRenderer {
         // the EGL context has already been lost.
         let _ = (self.program, self.vertex_array, self.vertex_buffer);
     }
+}
+
+unsafe fn gl_string(name: u32) -> String {
+    let value = gl::GetString(name);
+    if value.is_null() {
+        return "unavailable".to_owned();
+    }
+    CStr::from_ptr(value.cast()).to_string_lossy().into_owned()
 }
 
 unsafe fn compile_shader(kind: u32, source: &str) -> Result<u32, String> {
