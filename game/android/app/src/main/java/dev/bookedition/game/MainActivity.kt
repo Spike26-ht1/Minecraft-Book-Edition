@@ -125,10 +125,14 @@ class MainActivity : Activity() {
         val root = FrameLayout(this).apply {
             setBackgroundColor(Color.rgb(9, 14, 23))
         }
+        val bridge = NativeBridge()
+        lateinit var hud: GameHud
         val surface = GLSurfaceView(this).apply {
             setEGLContextClientVersion(3)
             preserveEGLContextOnPause = false
-            setRenderer(BookRenderer())
+            setRenderer(BookRenderer(bridge) { currentFps, frameMs ->
+                hud.updateFrame(currentFps, frameMs, bridge.debugInfo())
+            })
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         }
         gameSurface = surface
@@ -136,21 +140,8 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT
         ))
-        root.addView(createBrandPanel(), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP or Gravity.START
-        ).apply { setMargins(dp(18), dp(18), dp(18), 0) })
-        root.addView(menuButton("VOLTAR AO MENU", false) {
-            surface.onPause()
-            gameSurface = null
-            showingGame = false
-            showMainMenu()
-        }, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT,
-            dp(42),
-            Gravity.TOP or Gravity.END
-        ).apply { setMargins(0, dp(18), dp(18), 0) })
+        hud = GameHud(this, root, bridge) { showGameSettings(hud) }
+        hud.attach()
         root.addView(label("CENA VOXEL DE TESTE  •  PRÉ-ALPHA", 9f, Color.WHITE, false).apply {
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = rounded(Color.argb(160, 12, 19, 29), dp(10))
@@ -165,15 +156,56 @@ class MainActivity : Activity() {
 
     private fun showSettings() {
         AlertDialog.Builder(this)
-            .setTitle("Configurações")
+            .setTitle("Configurações de teste")
             .setMessage(
-                "Versão de teste\n\n" +
-                    "Renderizador: OpenGL ES 3.0\n" +
+                "Renderizador: OpenGL ES 3.0\n" +
                     "Plataforma: Android ARM64\n\n" +
-                    "As opções gráficas e de controle serão adicionadas conforme o motor evoluir."
+                    "Entre na cena de teste para abrir o menu mobile. Lá você pode alternar o F3, " +
+                    "mostrar ou ocultar os controles e ajustar a sensibilidade da câmera."
             )
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun showGameSettings(hud: GameHud) {
+        val options = arrayOf(
+            "Alternar painel F3",
+            "Mostrar / ocultar controles mobile",
+            "Ciclo de sensibilidade da câmera",
+            "Voltar ao menu principal"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Configurações de teste")
+            .setItems(options) { _, selected ->
+                when (selected) {
+                    0 -> hud.toggleDebug()
+                    1 -> {
+                        val visible = hud.toggleControls()
+                        android.widget.Toast.makeText(
+                            this,
+                            if (visible) "Controles ativados" else "Controles ocultos",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    2 -> {
+                        val level = hud.cycleSensitivity()
+                        android.widget.Toast.makeText(
+                            this,
+                            "Sensibilidade: $level",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    3 -> returnToMainMenu()
+                }
+            }
+            .show()
+    }
+
+    private fun returnToMainMenu() {
+        gameSurface?.onPause()
+        gameSurface = null
+        showingGame = false
+        showMainMenu()
     }
 
     private fun createBrandPanel(): View {
@@ -241,8 +273,14 @@ class MainActivity : Activity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 }
 
-private class BookRenderer : GLSurfaceView.Renderer {
-    private val bridge = NativeBridge()
+private class BookRenderer(
+    private val bridge: NativeBridge,
+    private val onFrameStats: (Int, Double) -> Unit
+) : GLSurfaceView.Renderer {
+    private var lastFrameNanos = 0L
+    private var statsStartNanos = System.nanoTime()
+    private var framesSinceStats = 0
+    private var lastFrameMs = 0.0
 
     override fun onSurfaceCreated(
         gl: javax.microedition.khronos.opengles.GL10?,
@@ -261,10 +299,33 @@ private class BookRenderer : GLSurfaceView.Renderer {
 
     override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
         bridge.drawFrame()
+        val now = System.nanoTime()
+        if (lastFrameNanos != 0L) {
+            lastFrameMs = (now - lastFrameNanos) / 1_000_000.0
+        }
+        lastFrameNanos = now
+        framesSinceStats++
+        val elapsed = now - statsStartNanos
+        if (elapsed >= 500_000_000L) {
+            val currentFps = (framesSinceStats * 1_000_000_000.0 / elapsed).toInt()
+            onFrameStats(currentFps, lastFrameMs)
+            framesSinceStats = 0
+            statsStartNanos = now
+        }
     }
 }
 
-private class NativeBridge {
+internal class NativeBridge {
+    fun setMovement(forward: Float, strafe: Float, vertical: Float) {
+        if (available) nativeSetMovement(forward, strafe, vertical)
+    }
+
+    fun look(yawDelta: Float, pitchDelta: Float) {
+        if (available) nativeLook(yawDelta, pitchDelta)
+    }
+
+    fun debugInfo(): String = if (available) nativeGetDebugInfo() else "Book64 unavailable"
+
     fun surfaceCreated() {
         if (available) nativeSurfaceCreated()
     }
@@ -280,6 +341,9 @@ private class NativeBridge {
     private external fun nativeSurfaceCreated()
     private external fun nativeSurfaceChanged(width: Int, height: Int)
     private external fun nativeDrawFrame()
+    private external fun nativeSetMovement(forward: Float, strafe: Float, vertical: Float)
+    private external fun nativeLook(yawDelta: Float, pitchDelta: Float)
+    private external fun nativeGetDebugInfo(): String
 
     companion object {
         val available: Boolean = runCatching {
