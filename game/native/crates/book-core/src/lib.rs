@@ -65,7 +65,7 @@ mod tests {
 
     #[test]
     fn negative_coordinates_use_euclidean_chunk_mapping() {
-        let block = BlockPosition { x: -1, y: -1, z: -17 };
+        let block = BlockPosition {\n            x: -1,\n            y: -1,\n            z: -17,\n        };
 
         assert_eq!(block.chunk_position(), ChunkPosition { x: -1, z: -2 });
         assert_eq!(block.local_position(), [15, 15, 15]);
@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn exact_negative_chunk_boundary_maps_without_off_by_one() {
-        let block = BlockPosition { x: -16, y: 0, z: -32 };
+        let block = BlockPosition {\n            x: -16,\n            y: 0,\n            z: -32,\n        };
 
         assert_eq!(block.chunk_position(), ChunkPosition { x: -1, z: -2 });
         assert_eq!(block.local_position(), [0, 0, 0]);
