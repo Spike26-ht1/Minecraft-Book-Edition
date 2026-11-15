@@ -4,6 +4,7 @@ import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -132,8 +133,9 @@ internal class GameHud(
         val totalMb = runtime.totalMemory() / (1024L * 1024L)
         val report = String.format(
             Locale.US,
-            "BOOK EDITION DEBUG\nFPS: %d  |  Frame: %.2f ms\nRenderer: Book64 / OpenGL ES 3.0\nDisplay: %d × %d  |  Density: %.2f\nHeap: %d / %d MB\nWorld: local voxel test scene\nChunk system: 16 × 16 × 16 section\n%s",
-            fps, frameMs, metrics.widthPixels, metrics.heightPixels, metrics.density,
+            "BOOK EDITION DEBUG\nFPS: %d  |  Frame: %.2f ms\nRenderer: Book64 / OpenGL ES 3.0\nDevice: %s %s\nAndroid: %s (API %d)\nDisplay: %d × %d  |  Density: %.2f\nHeap: %d / %d MB\nWorld: local voxel test scene\nChunk system: 16 × 16 × 16 section\n%s",
+            fps, frameMs, Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE,
+            Build.VERSION.SDK_INT, metrics.widthPixels, metrics.heightPixels, metrics.density,
             usedMb, totalMb, nativeInfo
         )
         debugPanel.post { debugPanel.text = report }
