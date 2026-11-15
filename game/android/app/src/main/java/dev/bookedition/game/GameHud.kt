@@ -135,10 +135,10 @@ internal class GameHud(
         val totalMb = runtime.totalMemory() / (1024L * 1024L)
         val report = String.format(
             Locale.US,
-            "BOOK EDITION DEBUG\nFPS: %d  |  Frame CPU: %.2f ms\nFPS mode: %s\nRenderer: Book64 / OpenGL ES 3.0\nDevice: %s %s\nAndroid: %s (API %d)\nDisplay: %d × %d  |  Density: %.2f\nHeap: %d / %d MB\nWorld: local voxel test scene\nChunk system: 16 × 16 × 16 section\n%s",
+            "BOOK EDITION DEBUG\nFPS: %d  |  Frame CPU: %.2f ms\nFPS mode: %s\nRenderer: Book64 / OpenGL ES 3.0\nDevice: %s %s\nAndroid: %s (API %d)\nDisplay: %d × %d  |  Density: %.2f\nHeap: %d / %d MB\nWorld: local voxel test scene\nResource pack: %s\nChunk system: 16 × 16 × 16 section\n%s",
             fps, frameMs, fpsMode, Build.MANUFACTURER, Build.MODEL, Build.VERSION.RELEASE,
             Build.VERSION.SDK_INT, metrics.widthPixels, metrics.heightPixels, metrics.density,
-            usedMb, totalMb, nativeInfo
+            usedMb, totalMb, activity.getSharedPreferences("book_resource_packs", Activity.MODE_PRIVATE).getString("active_pack_summary", "Nenhum (sem atlas carregado)"), nativeInfo
         )
         debugPanel.post { debugPanel.text = report }
     }
