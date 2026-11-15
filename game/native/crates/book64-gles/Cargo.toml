@@ -1,0 +1,9 @@
+[package]
+name = "book64-gles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+gl.workspace = true
+glam.workspace = true
