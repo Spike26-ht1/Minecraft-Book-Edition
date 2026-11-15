@@ -5,5 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+book-meshing = { path = "../book-meshing" }
+book-world = { path = "../book-world" }
 gl.workspace = true
 glam.workspace = true
