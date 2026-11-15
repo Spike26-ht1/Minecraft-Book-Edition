@@ -122,11 +122,11 @@ internal class GameHud(
     private var lastTouchX = 0f
     private var lastTouchY = 0f
 
-    fun updateFrame(currentFps: Int, currentFrameMs: Double, info: String) {
+    fun updateFrame(currentFps: Int, currentFrameMs: Double) {
         fps = currentFps
         frameMs = currentFrameMs
-        nativeInfo = info
         if (!debugVisible) return
+        nativeInfo = bridge.debugInfo()
         val metrics = activity.resources.displayMetrics
         val runtime = Runtime.getRuntime()
         val usedMb = (runtime.totalMemory() - runtime.freeMemory()) / (1024L * 1024L)
@@ -144,7 +144,7 @@ internal class GameHud(
     fun toggleDebug() {
         debugVisible = !debugVisible
         debugPanel.visibility = if (debugVisible) View.VISIBLE else View.GONE
-        if (debugVisible) updateFrame(fps, frameMs, bridge.debugInfo())
+        if (debugVisible) updateFrame(fps, frameMs)
     }
 
     fun toggleControls(): Boolean {
