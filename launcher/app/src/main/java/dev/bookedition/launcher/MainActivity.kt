@@ -51,6 +51,10 @@ class MainActivity : ComponentActivity() {
 
         runCatching { BookStorage.initialize(this) }
             .onFailure { android.util.Log.e("BookEdition", "Falha ao preparar armazenamento privado", it) }
+        val externalMediaRoot = BookStorage.initializeExternalMedia(this)
+        if (externalMediaRoot == null) {
+            android.util.Log.w("BookEdition", "Armazenamento externo Android/media indisponível")
+        }
         LauncherLogger.info(this, "Launcher iniciado • versão ${BuildConfig.VERSION_NAME}")
 
         setContent {
@@ -163,7 +167,8 @@ private fun BookEditionApp() {
                             LauncherSettings.setDetailedLogsEnabled(context, it)
                             LauncherLogger.info(context, "Registros detalhados: ${if (it) "ativados" else "desativados"}")
                         },
-                        storageRoot = BookStorage.rootPath(context)
+                        storageRoot = BookStorage.rootPath(context),
+                        externalStorageRoot = BookStorage.externalMediaRoot(context)
                     )
                     LauncherPage.LOGS -> LogsScreen(
                         logs = logContents,
@@ -350,7 +355,8 @@ private fun SettingsScreen(
     onDarkThemeChange: (Boolean) -> Unit,
     detailedLogs: Boolean,
     onDetailedLogsChange: (Boolean) -> Unit,
-    storageRoot: File
+    storageRoot: File,
+    externalStorageRoot: File?
 ) {
     Column(
         modifier = Modifier
@@ -378,15 +384,31 @@ private fun SettingsScreen(
         }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("PASTA EXTERNA • ANDROID/MEDIA", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("Arquivos acessíveis pelo gerenciador de arquivos", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    externalStorageRoot?.absolutePath ?: "Indisponível neste armazenamento",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Resource Packs, mundos, exportações, logs e cache terão pastas próprias. Você pode abrir Android/media no app Arquivos para acessá-los.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("ARMAZENAMENTO PRIVADO", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                Text("Diretório de dados", style = MaterialTheme.typography.titleMedium)
+                Text("Diretório interno de dados", style = MaterialTheme.typography.titleMedium)
                 Text(
                     storageRoot.absolutePath,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "Os dados ficam no espaço privado do aplicativo. A desinstalação do app pode removê-los.",
+                    "Configurações internas e dados temporários permanecem privados ao aplicativo.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
