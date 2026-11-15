@@ -108,7 +108,7 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         })
         labels.addView(TextView(this).apply {
-            text = "BOOK64  •  OPENGL ES 3.0"
+            text = if (NativeBridge.available) "BOOK64  •  TERRENO VOXEL  •  GLES 3.0" else "BOOK64 NATIVE LIBRARY NOT LOADED"
             setTextColor(Color.rgb(154, 190, 214))
             textSize = 10f
             letterSpacing = 0.08f
@@ -119,7 +119,7 @@ class MainActivity : Activity() {
 
     private fun createFooter(): View {
         return TextView(this).apply {
-            text = "PRÉ-ALPHA  •  CENA DE DIAGNÓSTICO  •  ANDROID ARM64"
+            text = "PRÉ-ALPHA  •  TERRENO VOXEL DE TESTE  •  ANDROID ARM64"
             setTextColor(Color.argb(205, 229, 237, 247))
             textSize = 10f
             letterSpacing = 0.08f
@@ -169,7 +169,7 @@ private class BookRenderer : GLSurfaceView.Renderer {
         gl: javax.microedition.khronos.opengles.GL10?,
         config: javax.microedition.khronos.egl.EGLConfig?
     ) {
-        bridge.nativeSurfaceCreated()
+        bridge.surfaceCreated()
     }
 
     override fun onSurfaceChanged(
@@ -177,22 +177,35 @@ private class BookRenderer : GLSurfaceView.Renderer {
         width: Int,
         height: Int
     ) {
-        bridge.nativeSurfaceChanged(width, height)
+        bridge.surfaceChanged(width, height)
     }
 
     override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
-        bridge.nativeDrawFrame()
+        bridge.drawFrame()
     }
 }
 
 private class NativeBridge {
-    external fun nativeSurfaceCreated()
-    external fun nativeSurfaceChanged(width: Int, height: Int)
-    external fun nativeDrawFrame()
+    fun surfaceCreated() {
+        if (available) nativeSurfaceCreated()
+    }
+
+    fun surfaceChanged(width: Int, height: Int) {
+        if (available) nativeSurfaceChanged(width, height)
+    }
+
+    fun drawFrame() {
+        if (available) nativeDrawFrame()
+    }
+
+    private external fun nativeSurfaceCreated()
+    private external fun nativeSurfaceChanged(width: Int, height: Int)
+    private external fun nativeDrawFrame()
 
     companion object {
-        init {
+        val available: Boolean = runCatching {
             System.loadLibrary("book_android")
-        }
+            true
+        }.getOrDefault(false)
     }
 }
