@@ -131,7 +131,7 @@ class MainActivity : Activity() {
             setEGLContextClientVersion(3)
             preserveEGLContextOnPause = false
             setRenderer(BookRenderer(bridge) { currentFps, frameMs ->
-                hud?.updateFrame(currentFps, frameMs, bridge.debugInfo())
+                hud?.updateFrame(currentFps, frameMs)
             })
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         }
