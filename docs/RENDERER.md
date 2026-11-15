@@ -17,6 +17,7 @@ The current terrain is generated test data, not a loaded world.
 The debug panel reports:
 - FPS, calculated from rendered frames.
 - Frame time in milliseconds.
+- Long-frame diagnostics in `game/logs/latest.log`, including event-loop update time, simulation time, chunk-generation time, mesh-upload time, renderer work time, and GPU chunk/vertex counts.
 - Active renderer and graphics API.
 - Chunk, block, and vertex counters.
 
@@ -40,6 +41,10 @@ A Vulkan-to-OpenGL command translator would add complexity and overhead while du
         book-client
 
 Sodium is a Java Edition renderer optimization mod, not a Vulkan-to-OpenGL translation layer. We can study public performance techniques and design ideas, but Book Edition's renderer will be implemented independently in Rust.
+
+## Long-frame diagnostics
+
+On Android, the game writes a `PERF RENDER STALL` entry when the interval between presented frames reaches 50 ms or renderer/present work reaches 25 ms. The client writes `PERF UPDATE STALL` when one event-loop update takes at least 25 ms, with separate timings for simulation, chunk generation, and mesh upload. Logging is rate-limited to avoid flooding the file. These records diagnose the source of a hitch; they do not claim that every hitch has been eliminated.
 
 ## Next renderer tasks
 
