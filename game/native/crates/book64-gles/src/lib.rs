@@ -324,7 +324,7 @@ unsafe fn shader_log(shader: u32) -> String {
 
     let mut buffer = vec![0_i8; length as usize];
     gl::GetShaderInfoLog(shader, length, ptr::null_mut(), buffer.as_mut_ptr());
-    CStr::from_ptr(buffer.as_ptr()).to_string_lossy().into_owned()
+    CStr::from_ptr(buffer.as_ptr())\n        .to_string_lossy()\n        .into_owned()
 }
 
 unsafe fn program_log(program: u32) -> String {
