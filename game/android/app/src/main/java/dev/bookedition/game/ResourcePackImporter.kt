@@ -92,7 +92,10 @@ internal object ResourcePackImporter {
             canvas.drawBitmap(atlas, Rect(r.left, r.bottom - 1, r.right, r.bottom),
                 Rect(r.left, r.bottom, r.right, r.bottom + 1), null)
         }
-        val folder = File(context.filesDir, "resource-packs/active").apply { mkdirs() }
+        val externalRoot = context.getExternalMediaDirs().firstOrNull()
+            ?.let { File(it, "book-edition/resource-packs/active") }
+            ?.takeIf { directory -> directory.exists() || directory.mkdirs() }
+        val folder = (externalRoot ?: File(context.filesDir, "resource-packs/active")).apply { mkdirs() }
         File(folder, "terrain-atlas.png").outputStream().use { atlas.compress(Bitmap.CompressFormat.PNG, 100, it) }
         val uv = JSONObject()
         for ((path, r) in placements) {
