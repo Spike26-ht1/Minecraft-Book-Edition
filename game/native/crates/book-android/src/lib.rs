@@ -2,7 +2,7 @@
 
 #[cfg(target_os = "android")]
 mod android {
-    use std::ffi::{c_void, CString};
+    use std::ffi::{c_char, c_void, CString};
     use std::sync::{Mutex, OnceLock};
 
     use book64_gles::GlesRenderer;
@@ -18,7 +18,7 @@ mod android {
 
     #[link(name = "EGL")]
     extern "C" {
-        fn eglGetProcAddress(procname: *const i8) -> *const c_void;
+        fn eglGetProcAddress(procname: *const c_char) -> *const c_void;
     }
 
     #[no_mangle]

@@ -3,7 +3,7 @@
 //! This milestone draws a deterministic test chunk with grass, dirt and stone.
 //! It is a renderer proof, not the final terrain or block system.
 
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::mem::size_of;
 use std::ptr;
 use std::time::Instant;
@@ -317,7 +317,7 @@ unsafe fn shader_log(shader: u32) -> String {
         return "no shader log was provided".to_owned();
     }
 
-    let mut buffer = vec![0_i8; length as usize];
+    let mut buffer = vec![0 as c_char; length as usize];
     gl::GetShaderInfoLog(shader, length, ptr::null_mut(), buffer.as_mut_ptr());
     CStr::from_ptr(buffer.as_ptr())
         .to_string_lossy()
@@ -331,7 +331,7 @@ unsafe fn program_log(program: u32) -> String {
         return "no program log was provided".to_owned();
     }
 
-    let mut buffer = vec![0_i8; length as usize];
+    let mut buffer = vec![0 as c_char; length as usize];
     gl::GetProgramInfoLog(program, length, ptr::null_mut(), buffer.as_mut_ptr());
     CStr::from_ptr(buffer.as_ptr())
         .to_string_lossy()
