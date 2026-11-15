@@ -1,5 +1,6 @@
 package dev.bookedition.launcher
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -141,6 +142,10 @@ private fun BookEditionApp() {
             ) {
                 when (selectedPage) {
                     LauncherPage.HOME -> HomeScreen(
+                        onPlay = {
+                            LauncherLogger.info(context, "Abrindo o jogo Book Edition")
+                            context.startActivity(Intent(context, dev.bookedition.game.MainActivity::class.java))
+                        },
                         onOpenVersions = { selectedPage = LauncherPage.VERSIONS },
                         onOpenLogs = { selectedPage = LauncherPage.LOGS }
                     )
@@ -180,6 +185,7 @@ private fun BookEditionApp() {
 
 @Composable
 private fun HomeScreen(
+    onPlay: () -> Unit,
     onOpenVersions: () -> Unit,
     onOpenLogs: () -> Unit
 ) {
@@ -229,9 +235,9 @@ private fun HomeScreen(
                         )
                     }
                 }
-                Text("Launcher pronto para testes iniciais", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text("Launcher + motor voxel • build de desenvolvimento", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "A interface e o armazenamento local estão disponíveis. O cliente Bedrock ainda não foi integrado.",
+                    "O launcher já inicia o menu do jogo e a primeira cena voxel experimental. A compatibilidade com Bedrock ainda está em desenvolvimento.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -239,15 +245,14 @@ private fun HomeScreen(
         }
 
         Button(
-            onClick = { },
-            enabled = false,
+            onClick = onPlay,
             modifier = Modifier.fillMaxWidth().height(54.dp),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Text("Jogar • indisponível nesta versão")
+            Text("Jogar")
         }
         Text(
-            "O botão será ativado quando existir uma implementação de cliente compatível.",
+            "Abre o menu do jogo Book Edition.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
