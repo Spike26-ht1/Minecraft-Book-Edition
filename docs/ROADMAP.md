@@ -34,7 +34,7 @@
 - [ ] Define versioned block definitions and block states.
 - [ ] Add world metadata (seed, generator version, spawn and settings).
 - [ ] Add world save/load format and recovery tests.
-- [ ] Connect world creation and seed input to the Android UI.
+- [x] Add Android world-creation dialog with numeric/random seed and pass it into Book64.
 - [ ] Add chunk streaming, background generation and unloading.
 - [ ] Add complete biome decoration, caves, ores, water and structures.
 - [ ] Add lighting system.
