@@ -83,8 +83,12 @@ internal class GameHud(
             background = rounded(Color.argb(205, 8, 15, 24), dp(10))
             visibility = View.GONE
         }
-        root.addView(debugPanel, FrameLayout.LayoutParams(dp(310), FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START).apply {
-            setMargins(dp(16), dp(66), 0, 0)
+        root.addView(debugPanel, FrameLayout.LayoutParams(
+            dp(310),
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        ).apply {
+            setMargins(dp(16), dp(66), dp(16), 0)
         })
 
         controls = LinearLayout(activity).apply {
