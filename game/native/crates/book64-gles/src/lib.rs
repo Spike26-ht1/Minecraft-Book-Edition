@@ -8,7 +8,7 @@ use std::mem::size_of;
 use std::ptr;
 use std::time::Instant;
 
-use book_meshing::build_chunk_region_mesh;
+use book_meshing::{build_chunk_column_mesh, build_chunk_region_mesh};
 use book_world::{TerrainGenerator, TERRAIN_GENERATOR_VERSION};
 use glam::{Mat4, Vec3};
 
