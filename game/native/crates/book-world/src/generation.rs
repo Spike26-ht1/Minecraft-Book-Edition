@@ -41,7 +41,9 @@ impl TerrainGenerator {
 
                 for local_y in 0..CHUNK_EDGE {
                     let world_y = section_y * CHUNK_EDGE + local_y;
-                    let block = if world_y == 0 {
+                    let block = if world_y < 0 {
+                        BlockId::AIR
+                    } else if world_y == 0 {
                         BlockId::BEDROCK
                     } else if world_y > surface {
                         BlockId::AIR
