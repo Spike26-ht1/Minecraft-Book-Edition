@@ -20,7 +20,7 @@
 - [x] Add an in-game test menu for F3 visibility, mobile controls and camera sensitivity.
 - [ ] Add a fixed-step simulation loop, player physics, collision and grounded jumping.
 - [ ] Add block ray selection and basic block interaction.
-- [ ] Add multi-chunk world and cross-chunk neighbor lookup.
+- [x] Add a 5 × 5 generated chunk region and horizontal/vertical cross-chunk neighbor lookup.
 - [ ] Add mesh invalidation and bounded chunk loading.
 - [x] Add persistent VSync / uncapped FPS selection for the Android renderer.
 - [ ] Add a full pause menu and persistent graphics settings.
@@ -30,7 +30,7 @@
 
 - [x] Add the first versioned, deterministic seeded terrain generator in Rust.
 - [x] Add initial biome classification and terrain surface layers.
-- [ ] Test terrain continuity at chunk borders and negative coordinates.
+- [x] Test horizontal chunk-boundary face removal and negative world-space placement.
 - [ ] Define versioned block definitions and block states.
 - [ ] Add world metadata (seed, generator version, spawn and settings).
 - [ ] Add world save/load format and recovery tests.
