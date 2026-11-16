@@ -1,5 +1,7 @@
 //! CPU-side voxel meshing for Book Edition chunk sections and columns.
 
+use std::collections::HashMap;
+
 use book_core::CHUNK_EDGE;
 use book_world::{BlockId, Chunk};
 
@@ -94,56 +96,81 @@ const FACES: [Face; 6] = [
     },
 ];
 
-/// Builds one section mesh. Faces at section boundaries remain visible because
-/// this function has no neighboring-section context.
+/// Builds one section mesh at world origin.
 pub fn build_chunk_mesh(chunk: &Chunk) -> ChunkMesh {
-    build_section_mesh(std::slice::from_ref(chunk), 0, 0)
+    build_chunk_region_mesh(&[(0, 0, vec![chunk.clone()])])
 }
 
-/// Builds a vertical chunk column and removes faces shared across section
-/// boundaries. Sections must be ordered from the lowest section upward.
+/// Builds one vertical chunk column and removes faces shared across sections.
 pub fn build_chunk_column_mesh(sections: &[Chunk]) -> ChunkMesh {
-    let mut mesh = ChunkMesh::default();
-
-    for section_index in 0..sections.len() {
-        let section_mesh = build_section_mesh(sections, section_index, section_index as i32);
-        mesh.vertices.extend(section_mesh.vertices);
-    }
-
-    mesh
+    build_chunk_region_mesh(&[(0, 0, sections.to_vec())])
 }
 
-fn build_section_mesh(
-    sections: &[Chunk],
-    section_index: usize,
-    vertical_offset_sections: i32,
-) -> ChunkMesh {
+/// Builds a horizontal region of chunk columns.
+///
+/// Each tuple is (chunk_x, chunk_z, vertical_sections). Sections must be
+/// ordered from the lowest section upward. Neighbor lookups cross horizontal
+/// and vertical section boundaries, so shared faces are never emitted.
+pub fn build_chunk_region_mesh(columns: &[(i32, i32, Vec<Chunk>)]) -> ChunkMesh {
     let mut mesh = ChunkMesh::default();
+    let lookup = columns
+        .iter()
+        .enumerate()
+        .map(|(index, (chunk_x, chunk_z, _))| ((*chunk_x, *chunk_z), index))
+        .collect::<HashMap<_, _>>();
 
-    for y in 0..CHUNK_EDGE {
-        for z in 0..CHUNK_EDGE {
-            for x in 0..CHUNK_EDGE {
-                let block = sections[section_index].get_block(x, y, z);
-                if block.is_air() {
-                    continue;
-                }
+    for (chunk_x, chunk_z, sections) in columns {
+        for (section_index, section) in sections.iter().enumerate() {
+            for y in 0..CHUNK_EDGE {
+                for z in 0..CHUNK_EDGE {
+                    for x in 0..CHUNK_EDGE {
+                        let block = section.get_block(x, y, z);
+                        if block.is_air() {
+                            continue;
+                        }
 
-                for face in FACES {
-                    let neighbor = neighbor_block(
-                        sections,
-                        section_index,
-                        x + face.neighbor[0],
-                        y + face.neighbor[1],
-                        z + face.neighbor[2],
-                    );
+                        for face in FACES {
+                            let neighbor_x = x + face.neighbor[0];
+                            let neighbor_y = y + face.neighbor[1];
+                            let neighbor_z = z + face.neighbor[2];
 
-                    if neighbor.is_air() {
-                        append_face(
-                            &mut mesh.vertices,
-                            [x, y + vertical_offset_sections * CHUNK_EDGE, z],
-                            block,
-                            face,
-                        );
+                            let neighbor_section = section_index as i32
+                                + if neighbor_y < 0 {
+                                    -1
+                                } else if neighbor_y >= CHUNK_EDGE {
+                                    1
+                                } else {
+                                    0
+                                };
+                            let neighbor_chunk_x =
+                                *chunk_x + neighbor_x.div_euclid(CHUNK_EDGE);
+                            let neighbor_chunk_z =
+                                *chunk_z + neighbor_z.div_euclid(CHUNK_EDGE);
+                            let local_x = neighbor_x.rem_euclid(CHUNK_EDGE);
+                            let local_y = neighbor_y.rem_euclid(CHUNK_EDGE);
+                            let local_z = neighbor_z.rem_euclid(CHUNK_EDGE);
+
+                            let neighbor = lookup
+                                .get(&(neighbor_chunk_x, neighbor_chunk_z))
+                                .and_then(|index| columns[*index].2.get(neighbor_section as usize))
+                                .map(|neighbor_section| {
+                                    neighbor_section.get_block(local_x, local_y, local_z)
+                                })
+                                .unwrap_or(BlockId::AIR);
+
+                            if neighbor.is_air() {
+                                append_face(
+                                    &mut mesh.vertices,
+                                    [
+                                        chunk_x * CHUNK_EDGE + x,
+                                        section_index as i32 * CHUNK_EDGE + y,
+                                        chunk_z * CHUNK_EDGE + z,
+                                    ],
+                                    block,
+                                    face,
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -151,25 +178,6 @@ fn build_section_mesh(
     }
 
     mesh
-}
-
-fn neighbor_block(sections: &[Chunk], section_index: usize, x: i32, y: i32, z: i32) -> BlockId {
-    if y < 0 {
-        return section_index
-            .checked_sub(1)
-            .and_then(|index| sections.get(index))
-            .map(|section| section.get_block(x, CHUNK_EDGE - 1, z))
-            .unwrap_or(BlockId::AIR);
-    }
-
-    if y >= CHUNK_EDGE {
-        return sections
-            .get(section_index + 1)
-            .map(|section| section.get_block(x, 0, z))
-            .unwrap_or(BlockId::AIR);
-    }
-
-    sections[section_index].get_block(x, y, z)
 }
 
 fn append_face(output: &mut Vec<MeshVertex>, block_position: [i32; 3], block: BlockId, face: Face) {
@@ -229,6 +237,29 @@ mod tests {
             .vertices
             .iter()
             .any(|vertex| vertex.position[1] >= 16.0));
+    }
+
+    #[test]
+    fn adjacent_horizontal_chunks_hide_their_shared_face() {
+        let mut west = Chunk::new();
+        let mut east = Chunk::new();
+        assert!(west.set_block(CHUNK_EDGE - 1, 4, 7, BlockId::STONE));
+        assert!(east.set_block(0, 4, 7, BlockId::STONE));
+
+        let mesh = build_chunk_region_mesh(&[
+            (0, 0, vec![west]),
+            (1, 0, vec![east]),
+        ]);
+        assert_eq!(mesh.vertex_count(), 60);
+    }
+
+    #[test]
+    fn negative_chunk_coordinates_are_written_in_world_space() {
+        let mut chunk = Chunk::new();
+        assert!(chunk.set_block(15, 3, 8, BlockId::GRASS));
+        let mesh = build_chunk_region_mesh(&[(-1, 0, vec![chunk])]);
+
+        assert!(mesh.vertices.iter().any(|vertex| vertex.position[0] == -1.0));
     }
 
     #[test]
