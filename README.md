@@ -23,7 +23,7 @@ The launcher now contains the game runtime as an Android library module:
 
 The game scene supports a persistent VSync/uncapped FPS selection. Uncapped mode requests EGL swap interval 0 and the F3 panel reports the active pacing mode and measured CPU frame interval. The Android compositor and display may still cap visible presentation.\n\nThe game scene now has a mobile HUD: touch-drag camera look, a directional movement pad, vertical movement, an F3 diagnostic panel and an in-game test menu. The test menu can toggle F3 and controls and cycle camera sensitivity. The F3 panel reports measured FPS/frame time, display size, Android heap and native camera/viewport/vertex data; systems that do not exist yet are not fabricated.
 
-The first scene renders deterministic grass/dirt/stone terrain generated from a 16 × 16 × 16 block section. The Rust mesher removes faces shared by adjacent solid blocks.
+The Rust world crate now includes a deterministic seeded terrain generator (algorithm version 1), initial plains/forest/desert/mountain classification, surface layers and bedrock. Book64 renders a generated vertical column made from four 16 × 16 × 16 sections, and the mesher removes faces shared by adjacent vertical sections. The current scene still uses one development seed and one horizontal chunk; the seed is shown in F3 but world creation, seed entry, chunk streaming and saving are not connected yet. See [docs/WORLD_GENERATION.md](docs/WORLD_GENERATION.md).
 
 **This is not yet a Minecraft-compatible client.** Mobile controls currently move a free camera through the test scene; there is not yet player collision, gravity, grounded jumping, persistent world, inventory, entities, multiplayer, Bedrock protocol implementation or Resource Pack texture loading.
 
