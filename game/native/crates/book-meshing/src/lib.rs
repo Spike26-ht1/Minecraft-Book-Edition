@@ -153,13 +153,7 @@ fn build_section_mesh(
     mesh
 }
 
-fn neighbor_block(
-    sections: &[Chunk],
-    section_index: usize,
-    x: i32,
-    y: i32,
-    z: i32,
-) -> BlockId {
+fn neighbor_block(sections: &[Chunk], section_index: usize, x: i32, y: i32, z: i32) -> BlockId {
     if y < 0 {
         return section_index
             .checked_sub(1)
@@ -231,7 +225,10 @@ mod tests {
 
         let mesh = build_chunk_column_mesh(&[lower, upper]);
         assert_eq!(mesh.vertex_count(), 60);
-        assert!(mesh.vertices.iter().any(|vertex| vertex.position[1] >= 16.0));
+        assert!(mesh
+            .vertices
+            .iter()
+            .any(|vertex| vertex.position[1] >= 16.0));
     }
 
     #[test]
