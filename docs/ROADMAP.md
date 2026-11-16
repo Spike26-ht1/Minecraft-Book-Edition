@@ -20,23 +20,30 @@
 - [x] Add an in-game test menu for F3 visibility, mobile controls and camera sensitivity.
 - [ ] Add a fixed-step simulation loop, player physics, collision and grounded jumping.
 - [ ] Add block ray selection and basic block interaction.
-- [ ] Add player collision and gravity.
 - [ ] Add multi-chunk world and cross-chunk neighbor lookup.
 - [ ] Add mesh invalidation and bounded chunk loading.
-- [x] Add persistent VSync / uncapped FPS selection for the Android renderer.\n- [ ] Add a full pause menu and persistent graphics settings.
+- [x] Add persistent VSync / uncapped FPS selection for the Android renderer.
+- [ ] Add a full pause menu and persistent graphics settings.
 - [ ] Expand F3 with biome, light, targeted block and player/world data as those systems become available.
 
 ## G2 — world foundation
 
+- [x] Add the first versioned, deterministic seeded terrain generator in Rust.
+- [x] Add initial biome classification and terrain surface layers.
+- [ ] Test terrain continuity at chunk borders and negative coordinates.
 - [ ] Define versioned block definitions and block states.
+- [ ] Add world metadata (seed, generator version, spawn and settings).
 - [ ] Add world save/load format and recovery tests.
-- [ ] Add configurable terrain generation.
-- [ ] Add chunk streaming and unloading.
-- [ ] Add biome and lighting systems.
+- [ ] Connect world creation and seed input to the Android UI.
+- [ ] Add chunk streaming, background generation and unloading.
+- [ ] Add complete biome decoration, caves, ores, water and structures.
+- [ ] Add lighting system.
 
 ## G3 — renderer
 
-- [x] Add first-pass user Resource Pack import, terrain_texture.json parser and local PNG atlas/index generation.\n- [ ] Upload atlas pages to Book64 GLES and render voxel faces with atlas UVs.\n- [ ] Add multi-page atlases, flipbook textures, material/alpha modes and biome tinting (Mojang assets remain user-supplied unless separately licensed).
+- [x] Add first-pass user Resource Pack import, terrain_texture.json parser and local PNG atlas/index generation.
+- [ ] Upload atlas pages to Book64 GLES and render voxel faces with atlas UVs.
+- [ ] Add multi-page atlases, flipbook textures, material/alpha modes and biome tinting (Mojang assets remain user-supplied unless separately licensed).
 - [ ] Add frustum culling and render-distance controls.
 - [ ] Add GPU resource lifecycle handling.
 - [ ] Profile frame pacing and memory on target devices.
