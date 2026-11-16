@@ -111,15 +111,12 @@ impl GlesRenderer {
         }
 
         let generator = TerrainGenerator::new(world_seed);
-        let mut columns = Vec::with_capacity(
-            ((GENERATED_HORIZONTAL_RADIUS * 2 + 1).pow(2)) as usize,
-        );
+        let mut columns =
+            Vec::with_capacity(((GENERATED_HORIZONTAL_RADIUS * 2 + 1).pow(2)) as usize);
         for chunk_x in -GENERATED_HORIZONTAL_RADIUS..=GENERATED_HORIZONTAL_RADIUS {
             for chunk_z in -GENERATED_HORIZONTAL_RADIUS..=GENERATED_HORIZONTAL_RADIUS {
                 let sections = (0..GENERATED_VERTICAL_SECTIONS)
-                    .map(|section_y| {
-                        generator.generate_section(chunk_x, section_y, chunk_z)
-                    })
+                    .map(|section_y| generator.generate_section(chunk_x, section_y, chunk_z))
                     .collect::<Vec<_>>();
                 columns.push((chunk_x, chunk_z, sections));
             }
