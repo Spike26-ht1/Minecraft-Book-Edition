@@ -62,12 +62,9 @@ impl TerrainGenerator {
     }
 
     pub fn biome_at(&self, world_x: i32, world_z: i32) -> Biome {
-        let temperature =
-            value_noise(self.seed ^ 0xA076_1D64_78BD_642F, world_x, world_z, 192);
-        let moisture =
-            value_noise(self.seed ^ 0xE703_7ED1_A0B4_28DB, world_x, world_z, 160);
-        let elevation =
-            value_noise(self.seed ^ 0x8EBC_6AF0_9C88_C6E3, world_x, world_z, 112);
+        let temperature = value_noise(self.seed ^ 0xA076_1D64_78BD_642F, world_x, world_z, 192);
+        let moisture = value_noise(self.seed ^ 0xE703_7ED1_A0B4_28DB, world_x, world_z, 160);
+        let elevation = value_noise(self.seed ^ 0x8EBC_6AF0_9C88_C6E3, world_x, world_z, 112);
 
         if elevation > 0.48 {
             Biome::Mountains
@@ -82,18 +79,8 @@ impl TerrainGenerator {
 
     pub fn surface_height(&self, world_x: i32, world_z: i32) -> i32 {
         let continent = value_noise(self.seed, world_x, world_z, 128);
-        let hills = value_noise(
-            self.seed ^ 0xD1B5_4A32_D192_ED03,
-            world_x,
-            world_z,
-            48,
-        );
-        let detail = value_noise(
-            self.seed ^ 0x94D0_49BB_1331_11EB,
-            world_x,
-            world_z,
-            24,
-        );
+        let hills = value_noise(self.seed ^ 0xD1B5_4A32_D192_ED03, world_x, world_z, 48);
+        let detail = value_noise(self.seed ^ 0x94D0_49BB_1331_11EB, world_x, world_z, 24);
         let biome = self.biome_at(world_x, world_z);
 
         let biome_offset = match biome {
@@ -200,9 +187,8 @@ mod tests {
     fn different_seeds_change_at_least_one_sampled_height() {
         let a = TerrainGenerator::new(1);
         let b = TerrainGenerator::new(2);
-        let differs = (-32..32).any(|x| {
-            (-32..32).any(|z| a.surface_height(x, z) != b.surface_height(x, z))
-        });
+        let differs =
+            (-32..32).any(|x| (-32..32).any(|z| a.surface_height(x, z) != b.surface_height(x, z)));
         assert!(differs);
     }
 
