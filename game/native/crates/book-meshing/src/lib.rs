@@ -105,7 +105,7 @@ pub fn build_chunk_mesh(chunk: &Chunk) -> ChunkMesh {
 pub fn build_chunk_column_mesh(sections: &[Chunk]) -> ChunkMesh {
     let mut mesh = ChunkMesh::default();
 
-    for (section_index, section) in sections.iter().enumerate() {
+    for section_index in 0..sections.len() {
         let section_mesh = build_section_mesh(sections, section_index, section_index as i32);
         mesh.vertices.extend(section_mesh.vertices);
     }
