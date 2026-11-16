@@ -8,7 +8,7 @@ use std::mem::size_of;
 use std::ptr;
 use std::time::Instant;
 
-use book_meshing::build_chunk_column_mesh;
+use book_meshing::build_chunk_region_mesh;
 use book_world::{TerrainGenerator, TERRAIN_GENERATOR_VERSION};
 use glam::{Mat4, Vec3};
 
@@ -24,6 +24,7 @@ void main() {
 "#;
 
 const GENERATED_VERTICAL_SECTIONS: i32 = 4;
+const GENERATED_HORIZONTAL_RADIUS: i32 = 2;
 
 const FRAGMENT_SHADER: &str = r#"#version 300 es
 precision mediump float;
@@ -44,7 +45,6 @@ pub struct GlesRenderer {
     vertex_buffer: u32,
     mvp_location: i32,
     vertex_count: i32,
-    started_at: Instant,
     width: i32,
     height: i32,
     camera_position: Vec3,
@@ -111,10 +111,20 @@ impl GlesRenderer {
         }
 
         let generator = TerrainGenerator::new(world_seed);
-        let sections = (0..GENERATED_VERTICAL_SECTIONS)
-            .map(|section_y| generator.generate_section(0, section_y, 0))
-            .collect::<Vec<_>>();
-        let mesh = build_chunk_column_mesh(&sections);
+        let mut columns = Vec::with_capacity(
+            ((GENERATED_HORIZONTAL_RADIUS * 2 + 1).pow(2)) as usize,
+        );
+        for chunk_x in -GENERATED_HORIZONTAL_RADIUS..=GENERATED_HORIZONTAL_RADIUS {
+            for chunk_z in -GENERATED_HORIZONTAL_RADIUS..=GENERATED_HORIZONTAL_RADIUS {
+                let sections = (0..GENERATED_VERTICAL_SECTIONS)
+                    .map(|section_y| {
+                        generator.generate_section(chunk_x, section_y, chunk_z)
+                    })
+                    .collect::<Vec<_>>();
+                columns.push((chunk_x, chunk_z, sections));
+            }
+        }
+        let mesh = build_chunk_region_mesh(&columns);
         if mesh.is_empty() {
             gl::DeleteProgram(program);
             return Err("The test chunk produced an empty mesh".to_owned());
@@ -166,12 +176,11 @@ impl GlesRenderer {
             vertex_buffer,
             mvp_location,
             vertex_count,
-            started_at: Instant::now(),
             width: 1,
             height: 1,
-            camera_position: Vec3::new(22.0, 18.0, 25.0),
-            camera_yaw: -2.26,
-            camera_pitch: -0.615,
+            camera_position: Vec3::new(26.0, 40.0, 26.0),
+            camera_yaw: -2.356,
+            camera_pitch: -0.31,
             move_forward: 0.0,
             move_strafe: 0.0,
             move_vertical: 0.0,
@@ -214,10 +223,7 @@ impl GlesRenderer {
         let projection = Mat4::perspective_rh_gl(48.0_f32.to_radians(), aspect, 0.1, 100.0);
         let front = self.camera_front();
         let view = Mat4::look_at_rh(self.camera_position, self.camera_position + front, Vec3::Y);
-        let angle = self.started_at.elapsed().as_secs_f32() * 0.12;
-        let model = Mat4::from_translation(Vec3::new(8.0, 3.0, 8.0))
-            * Mat4::from_rotation_y(angle)
-            * Mat4::from_translation(Vec3::new(-8.0, -3.0, -8.0));
+        let model = Mat4::IDENTITY;
         let mvp = projection * view * model;
 
         gl::UniformMatrix4fv(
@@ -249,7 +255,7 @@ impl GlesRenderer {
 
     pub fn debug_info(&self) -> String {
         format!(
-            "XYZ: {:.2}, {:.2}, {:.2}\nBlock: {}, {}, {}\nChunk: {}, {}, {}\nYaw/Pitch: {:.2} / {:.2}\nWorld seed: {}\nGenerator: {}\nViewport: {} × {}\nVertices: {}\nGPU vendor: {}\nGPU: {}\nGLES: {}",
+            "XYZ: {:.2}, {:.2}, {:.2}\nBlock: {}, {}, {}\nChunk: {}, {}, {}\nYaw/Pitch: {:.2} / {:.2}\nWorld seed: {}\nGenerator: {}\nChunk region: {} × {} | {} vertical sections\nViewport: {} × {}\nVertices: {}\nGPU vendor: {}\nGPU: {}\nGLES: {}",
             self.camera_position.x,
             self.camera_position.y,
             self.camera_position.z,
@@ -263,6 +269,9 @@ impl GlesRenderer {
             self.camera_pitch.to_degrees(),
             self.world_seed as i64,
             TERRAIN_GENERATOR_VERSION,
+            GENERATED_HORIZONTAL_RADIUS * 2 + 1,
+            GENERATED_HORIZONTAL_RADIUS * 2 + 1,
+            GENERATED_VERTICAL_SECTIONS,
             self.width,
             self.height,
             self.vertex_count,
