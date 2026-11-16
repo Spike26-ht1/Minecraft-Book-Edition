@@ -14,11 +14,13 @@ import android.util.Base64
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import java.nio.charset.StandardCharsets
+import java.security.SecureRandom
 
 /** Game entry point embedded in the Book Edition launcher APK. */
 class MainActivity : Activity() {
@@ -26,11 +28,14 @@ class MainActivity : Activity() {
     private var showingGame = false
     private var gameRenderer: BookRenderer? = null
     private val resourcePackRequestCode = 501
+    private var selectedWorldSeed: Long = 20261116L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        selectedWorldSeed = getSharedPreferences("book_worlds", MODE_PRIVATE)
+            .getLong("selected_seed", 20261116L)
         hideSystemUi()
         showMainMenu()
     }
@@ -101,7 +106,7 @@ class MainActivity : Activity() {
             letterSpacing = 0.18f
             setPadding(0, dp(5), 0, dp(18))
         })
-        content.addView(menuButton("JOGAR", true) { startGameScene() }, buttonLayoutParams())
+        content.addView(menuButton("JOGAR", true) { showWorldCreation() }, buttonLayoutParams())
         content.addView(menuButton("CONFIGURAÇÕES", false) { showSettings() }, buttonLayoutParams(10))
         content.addView(menuButton("SAIR", false) { finish() }, buttonLayoutParams(10))
         val engineStatus = if (NativeBridge.available) "BOOK64 GLES 3.0" else "MOTOR NATIVO NÃO CARREGADO"
@@ -114,6 +119,51 @@ class MainActivity : Activity() {
         ))
         setContentView(root)
         hideSystemUi()
+    }
+
+    private fun showWorldCreation() {
+        val seedInput = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                android.text.InputType.TYPE_NUMBER_FLAG_SIGNED
+            setSingleLine(true)
+            setText(selectedWorldSeed.toString())
+            hint = "Seed numérica"
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+            addView(label("A mesma seed reproduz o mesmo terreno nesta versão do gerador.", 12f,
+                Color.rgb(170, 185, 198), false))
+            addView(seedInput, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(54)
+            ).apply { topMargin = dp(12) })
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Criar mundo")
+            .setView(content)
+            .setPositiveButton("CRIAR") { _, _ ->
+                val seed = seedInput.text.toString().trim().toLongOrNull()
+                if (seed == null) {
+                    android.widget.Toast.makeText(
+                        this, "Digite uma seed numérica válida.", android.widget.Toast.LENGTH_LONG
+                    ).show()
+                    showWorldCreation()
+                    return@setPositiveButton
+                }
+                selectedWorldSeed = seed
+                getSharedPreferences("book_worlds", MODE_PRIVATE)
+                    .edit().putLong("selected_seed", seed).apply()
+                startGameScene()
+            }
+            .setNeutralButton("SEED ALEATÓRIA") { _, _ ->
+                selectedWorldSeed = SecureRandom().nextLong()
+                getSharedPreferences("book_worlds", MODE_PRIVATE)
+                    .edit().putLong("selected_seed", selectedWorldSeed).apply()
+                startGameScene()
+            }
+            .setNegativeButton("VOLTAR", null)
+            .show()
     }
 
     private fun startGameScene() {
@@ -133,7 +183,7 @@ class MainActivity : Activity() {
         var hud: GameHud? = null
         val initialUncapped = getSharedPreferences("book_settings", MODE_PRIVATE)
             .getBoolean("uncapped_fps", false)
-        val renderer = BookRenderer(bridge, initialUncapped) { currentFps, frameMs, mode ->
+        val renderer = BookRenderer(bridge, initialUncapped, selectedWorldSeed) { currentFps, frameMs, mode ->
             hud?.updateFrame(currentFps, frameMs, mode)
         }
         gameRenderer = renderer
@@ -341,6 +391,7 @@ class MainActivity : Activity() {
 private class BookRenderer(
     private val bridge: NativeBridge,
     initialUncapped: Boolean,
+    private val worldSeed: Long,
     private val onFrameStats: (Int, Double, String) -> Unit
 ) : GLSurfaceView.Renderer {
     @Volatile
@@ -379,7 +430,7 @@ private class BookRenderer(
         gl: javax.microedition.khronos.opengles.GL10?,
         config: javax.microedition.khronos.egl.EGLConfig?
     ) {
-        bridge.surfaceCreated()
+        bridge.surfaceCreated(worldSeed)
         applyFramePacing()
     }
 
@@ -420,8 +471,8 @@ internal class NativeBridge {
 
     fun debugInfo(): String = if (available) nativeGetDebugInfo() else "Book64 unavailable"
 
-    fun surfaceCreated() {
-        if (available) nativeSurfaceCreated()
+    fun surfaceCreated(seed: Long) {
+        if (available) nativeSurfaceCreated(seed)
     }
 
     fun surfaceChanged(width: Int, height: Int) {
@@ -432,7 +483,7 @@ internal class NativeBridge {
         if (available) nativeDrawFrame()
     }
 
-    private external fun nativeSurfaceCreated()
+    private external fun nativeSurfaceCreated(seed: Long)
     private external fun nativeSurfaceChanged(width: Int, height: Int)
     private external fun nativeDrawFrame()
     private external fun nativeSetMovement(forward: Float, strafe: Float, vertical: Float)
