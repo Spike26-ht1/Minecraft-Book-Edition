@@ -23,7 +23,6 @@ void main() {
 }
 "#;
 
-const DEFAULT_WORLD_SEED: u64 = 0xB00C_ED17_2026;
 const GENERATED_VERTICAL_SECTIONS: i32 = 4;
 
 const FRAGMENT_SHADER: &str = r#"#version 300 es
@@ -68,6 +67,7 @@ impl GlesRenderer {
     /// A valid OpenGL ES 3.0 context must be current on the calling thread.
     pub unsafe fn initialize(
         loader: impl FnMut(&'static str) -> *const c_void,
+        world_seed: u64,
     ) -> Result<Self, String> {
         gl::load_with(loader);
 
@@ -110,7 +110,6 @@ impl GlesRenderer {
             return Err("Book64 could not locate the u_mvp uniform".to_owned());
         }
 
-        let world_seed = DEFAULT_WORLD_SEED;
         let generator = TerrainGenerator::new(world_seed);
         let sections = (0..GENERATED_VERTICAL_SECTIONS)
             .map(|section_y| generator.generate_section(0, section_y, 0))
@@ -262,7 +261,7 @@ impl GlesRenderer {
             (self.camera_position.z.floor() as i32).div_euclid(16),
             self.camera_yaw.to_degrees(),
             self.camera_pitch.to_degrees(),
-            self.world_seed,
+            self.world_seed as i64,
             TERRAIN_GENERATOR_VERSION,
             self.width,
             self.height,
