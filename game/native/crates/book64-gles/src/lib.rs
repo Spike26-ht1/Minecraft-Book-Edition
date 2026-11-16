@@ -353,9 +353,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generated_test_chunk_has_visible_voxel_geometry() {
-        let chunk = Chunk::generate_test_terrain();
-        let mesh = build_chunk_mesh(&chunk);
+    fn seeded_terrain_column_has_visible_voxel_geometry() {
+        let generator = TerrainGenerator::new(42);
+        let sections = (0..GENERATED_VERTICAL_SECTIONS)
+            .map(|section_y| generator.generate_section(0, section_y, 0))
+            .collect::<Vec<_>>();
+        let mesh = build_chunk_column_mesh(&sections);
 
         assert!(!mesh.is_empty());
         assert_eq!(mesh.vertex_count() % 3, 0);
