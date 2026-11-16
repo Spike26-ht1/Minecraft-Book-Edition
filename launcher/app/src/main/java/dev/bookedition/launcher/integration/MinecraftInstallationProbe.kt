@@ -29,19 +29,20 @@ object MinecraftInstallationProbe {
     @Suppress("DEPRECATION")
     fun inspect(context: Context): Result {
         val pm = context.packageManager
+        val queryFlags = if (Build.VERSION.SDK_INT >= 28) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
         val info = try {
             if (Build.VERSION.SDK_INT >= 33) {
                 pm.getPackageInfo(
                     OFFICIAL_PACKAGE,
-                    PackageManager.PackageInfoFlags.of(
-                        PackageManager.GET_SIGNING_CERTIFICATES.toLong()
-                    )
+                    PackageManager.PackageInfoFlags.of(queryFlags.toLong())
                 )
             } else {
-                pm.getPackageInfo(
-                    OFFICIAL_PACKAGE,
-                    PackageManager.GET_SIGNING_CERTIFICATES
-                )
+                pm.getPackageInfo(OFFICIAL_PACKAGE, queryFlags)
             }
         } catch (_: PackageManager.NameNotFoundException) {
             return Result(
@@ -65,7 +66,7 @@ object MinecraftInstallationProbe {
         val fingerprints = signatures.map { signature ->
             MessageDigest.getInstance("SHA-256")
                 .digest(signature.toByteArray())
-                .joinToString("") { byte -> "%02X".format(byte) }
+                .joinToString("") { byte -> "%02X".format(byte.toInt() and 0xFF) }
         }
 
         val versionCode = if (Build.VERSION.SDK_INT >= 28) {
