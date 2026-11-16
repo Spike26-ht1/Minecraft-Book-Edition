@@ -5,6 +5,7 @@
 O crate `book-world` agora contém um gerador procedural determinístico com seed:
 
 - `TerrainGenerator::new(seed)` cria as configurações de geração.
+- O menu **JOGAR → Criar mundo** aceita uma seed numérica ou gera uma seed aleatória; a seleção é lembrada localmente e enviada ao Book64 pelo JNI.
 - `generate_section(chunk_x, section_y, chunk_z)` gera uma seção vertical 16×16×16.
 - A mesma seed, versão do algoritmo e coordenadas geram os mesmos blocos.
 - Coordenadas negativas usam divisão euclidiana para manter a continuidade entre chunks.
@@ -15,7 +16,7 @@ O crate `book-world` agora contém um gerador procedural determinístico com see
 
 Esta é a primeira base do gerador, não uma reprodução do gerador oficial Bedrock. Os biomas ainda não possuem árvores, vegetação, rios, oceanos, cavernas, minérios, estruturas, clima ou distribuição completa de blocos. O gerador ainda não está conectado à tela de criação de mundo nem ao streaming/renderizador de chunks.
 
-A seed e a versão do gerador precisam ser salvas junto dos dados do mundo. Ao mudar o algoritmo no futuro, devemos criar uma nova versão em vez de alterar silenciosamente mundos existentes.
+A seed selecionada é lembrada nas preferências locais, mas ainda não existe um arquivo de mundo com blocos persistidos. A seed e a versão do gerador precisam ser gravadas nos metadados de cada mundo. Ao mudar o algoritmo no futuro, devemos criar uma nova versão em vez de alterar silenciosamente mundos existentes.
 
 ## Próximas etapas
 
@@ -25,7 +26,7 @@ A seed e a versão do gerador precisam ser salvas junto dos dados do mundo. Ao m
 4. Gerar chunks em tarefas de fundo com limite de trabalho por frame.
 5. Conectar o resultado ao mesher e ao Book64.
 6. Adicionar árvores, água, cavernas, minérios e estruturas em etapas isoladas, cada uma com testes de seed.
-7. Criar a interface de novo mundo com seed digitada ou aleatória.
+7. Expandir a interface de mundo com nome, configurações e lista de mundos salvos.
 
 ## Testes automatizados incluídos
 
