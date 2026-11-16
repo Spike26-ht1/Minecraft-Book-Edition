@@ -142,10 +142,8 @@ pub fn build_chunk_region_mesh(columns: &[(i32, i32, Vec<Chunk>)]) -> ChunkMesh 
                                 } else {
                                     0
                                 };
-                            let neighbor_chunk_x =
-                                *chunk_x + neighbor_x.div_euclid(CHUNK_EDGE);
-                            let neighbor_chunk_z =
-                                *chunk_z + neighbor_z.div_euclid(CHUNK_EDGE);
+                            let neighbor_chunk_x = *chunk_x + neighbor_x.div_euclid(CHUNK_EDGE);
+                            let neighbor_chunk_z = *chunk_z + neighbor_z.div_euclid(CHUNK_EDGE);
                             let local_x = neighbor_x.rem_euclid(CHUNK_EDGE);
                             let local_y = neighbor_y.rem_euclid(CHUNK_EDGE);
                             let local_z = neighbor_z.rem_euclid(CHUNK_EDGE);
@@ -246,10 +244,7 @@ mod tests {
         assert!(west.set_block(CHUNK_EDGE - 1, 4, 7, BlockId::STONE));
         assert!(east.set_block(0, 4, 7, BlockId::STONE));
 
-        let mesh = build_chunk_region_mesh(&[
-            (0, 0, vec![west]),
-            (1, 0, vec![east]),
-        ]);
+        let mesh = build_chunk_region_mesh(&[(0, 0, vec![west]), (1, 0, vec![east])]);
         assert_eq!(mesh.vertex_count(), 60);
     }
 
@@ -259,7 +254,10 @@ mod tests {
         assert!(chunk.set_block(15, 3, 8, BlockId::GRASS));
         let mesh = build_chunk_region_mesh(&[(-1, 0, vec![chunk])]);
 
-        assert!(mesh.vertices.iter().any(|vertex| vertex.position[0] == -1.0));
+        assert!(mesh
+            .vertices
+            .iter()
+            .any(|vertex| vertex.position[0] == -1.0));
     }
 
     #[test]
