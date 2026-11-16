@@ -1,4 +1,8 @@
-//! Minimal voxel storage used by the first Book Edition world prototype.
+//! Voxel block storage and world-generation primitives for Book Edition.
+
+mod generation;
+
+pub use generation::{Biome, TerrainGenerator, TERRAIN_GENERATOR_VERSION};
 
 use book_core::CHUNK_EDGE;
 
@@ -16,9 +20,15 @@ impl BlockId {
     pub const GRASS: Self = Self(1);
     pub const DIRT: Self = Self(2);
     pub const STONE: Self = Self(3);
+    pub const SAND: Self = Self(4);
+    pub const BEDROCK: Self = Self(5);
 
     pub const fn is_air(self) -> bool {
         self.0 == Self::AIR.0
+    }
+
+    pub const fn numeric_id(self) -> u16 {
+        self.0
     }
 
     /// Base display color for the first untextured renderer.
@@ -27,15 +37,14 @@ impl BlockId {
             1 => [0.34, 0.68, 0.29],
             2 => [0.48, 0.32, 0.19],
             3 => [0.48, 0.51, 0.54],
+            4 => [0.82, 0.74, 0.48],
+            5 => [0.20, 0.20, 0.22],
             _ => [0.0, 0.0, 0.0],
         }
     }
 }
 
-/// One 16 × 16 × 16 block section.
-///
-/// This first implementation stores compact block identifiers only. Block
-/// properties, palettes and persistence will be added in later milestones.
+/// One 16 × 16 × 16 vertical section of a horizontal chunk.
 #[derive(Clone)]
 pub struct Chunk {
     blocks: Box<[BlockId; CHUNK_VOLUME]>,
@@ -63,7 +72,7 @@ impl Chunk {
     }
 
     /// Sets a block and returns false when the local coordinate is outside
-    /// the chunk section.
+    /// the section.
     pub fn set_block(&mut self, x: i32, y: i32, z: i32, block: BlockId) -> bool {
         let Some(index) = block_index(x, y, z) else {
             return false;
@@ -73,8 +82,7 @@ impl Chunk {
         true
     }
 
-    /// Creates a deterministic, small terrain patch for renderer development.
-    /// This is a test fixture, not the final terrain generator.
+    /// Legacy renderer fixture retained for regression tests.
     pub fn generate_test_terrain() -> Self {
         let mut chunk = Self::new();
 
