@@ -12,6 +12,7 @@ O crate `book-world` contém um gerador procedural determinístico com seed:
 - Coordenadas negativas usam divisão euclidiana.
 - A versão atual do algoritmo é `TERRAIN_GENERATOR_VERSION = 1`.
 - O terreno possui variação de altura, quatro classificações iniciais de bioma (planícies, floresta, deserto e montanhas), camadas de superfície/subsolo e bedrock na altura zero.
+- Os limiares dos biomas foram balanceados para que a seed de teste padrão 20261116 apresente planícies, floresta e montanhas na região inicial.
 - A cena de teste dev.9 gera uma região horizontal de 5×5 chunks, cada coluna com quatro seções verticais.
 - O mesher consulta os chunks vizinhos nas direções X, Y e Z e elimina faces internas em bordas entre chunks.
 
@@ -37,6 +38,7 @@ A câmera é livre e ainda não possui colisão, gravidade ou física de jogador
 - Seeds diferentes produzem diferenças em uma área de amostragem.
 - A seção inferior contém bedrock.
 - As alturas permanecem dentro dos limites definidos.
+- A seed padrão apresenta mais de um bioma na região inicial.
 - Faces internas entre dois blocos no mesmo chunk são removidas.
 - Faces internas entre seções verticais vizinhas são removidas.
 - Faces internas entre chunks horizontais vizinhos são removidas.
