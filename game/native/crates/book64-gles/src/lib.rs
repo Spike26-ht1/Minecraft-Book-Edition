@@ -8,8 +8,8 @@ use std::mem::size_of;
 use std::ptr;
 use std::time::Instant;
 
-use book_meshing::build_chunk_mesh;
-use book_world::Chunk;
+use book_meshing::build_chunk_column_mesh;
+use book_world::{TerrainGenerator, TERRAIN_GENERATOR_VERSION};
 use glam::{Mat4, Vec3};
 
 const VERTEX_SHADER: &str = r#"#version 300 es
@@ -22,6 +22,9 @@ void main() {
     v_color = a_color;
 }
 "#;
+
+const DEFAULT_WORLD_SEED: u64 = 0xB00C_ED17_2026;
+const GENERATED_VERTICAL_SECTIONS: i32 = 4;
 
 const FRAGMENT_SHADER: &str = r#"#version 300 es
 precision mediump float;
@@ -55,6 +58,7 @@ pub struct GlesRenderer {
     gpu_vendor: String,
     gpu_renderer: String,
     gles_version: String,
+    world_seed: u64,
 }
 
 impl GlesRenderer {
@@ -106,8 +110,12 @@ impl GlesRenderer {
             return Err("Book64 could not locate the u_mvp uniform".to_owned());
         }
 
-        let chunk = Chunk::generate_test_terrain();
-        let mesh = build_chunk_mesh(&chunk);
+        let world_seed = DEFAULT_WORLD_SEED;
+        let generator = TerrainGenerator::new(world_seed);
+        let sections = (0..GENERATED_VERTICAL_SECTIONS)
+            .map(|section_y| generator.generate_section(0, section_y, 0))
+            .collect::<Vec<_>>();
+        let mesh = build_chunk_column_mesh(&sections);
         if mesh.is_empty() {
             gl::DeleteProgram(program);
             return Err("The test chunk produced an empty mesh".to_owned());
@@ -172,6 +180,7 @@ impl GlesRenderer {
             gpu_vendor,
             gpu_renderer,
             gles_version,
+            world_seed,
         })
     }
 
@@ -241,7 +250,7 @@ impl GlesRenderer {
 
     pub fn debug_info(&self) -> String {
         format!(
-            "XYZ: {:.2}, {:.2}, {:.2}\nBlock: {}, {}, {}\nChunk: {}, {}, {}\nYaw/Pitch: {:.2} / {:.2}\nViewport: {} × {}\nVertices: {}\nGPU vendor: {}\nGPU: {}\nGLES: {}",
+            "XYZ: {:.2}, {:.2}, {:.2}\nBlock: {}, {}, {}\nChunk: {}, {}, {}\nYaw/Pitch: {:.2} / {:.2}\nWorld seed: {}\nGenerator: {}\nViewport: {} × {}\nVertices: {}\nGPU vendor: {}\nGPU: {}\nGLES: {}",
             self.camera_position.x,
             self.camera_position.y,
             self.camera_position.z,
@@ -253,6 +262,8 @@ impl GlesRenderer {
             (self.camera_position.z.floor() as i32).div_euclid(16),
             self.camera_yaw.to_degrees(),
             self.camera_pitch.to_degrees(),
+            self.world_seed,
+            TERRAIN_GENERATOR_VERSION,
             self.width,
             self.height,
             self.vertex_count,
