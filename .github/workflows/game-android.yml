@@ -71,7 +71,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: book-edition-launcher-game-arm64-dev-8
+          name: book-edition-launcher-game-arm64-dev-9
           path: launcher/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
