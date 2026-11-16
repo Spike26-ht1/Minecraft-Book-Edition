@@ -1,15 +1,13 @@
 //! Seeded, deterministic terrain generation for Book Edition.
 //!
-//! The generator is intentionally independent of Android and the renderer.
-//! A world seed plus chunk coordinates and generator version fully determine
-//! the generated section.
+//! A world seed, generator version and chunk coordinates fully determine
+//! the generated section. This module has no Android or renderer dependency.
 
 use book_core::CHUNK_EDGE;
 
 use crate::{BlockId, Chunk};
 
-/// Version of the terrain algorithm. Persist this with worlds so future
-/// generator changes do not silently alter newly generated chunks.
+/// Persist this version with world metadata.
 pub const TERRAIN_GENERATOR_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,7 +18,6 @@ pub enum Biome {
     Mountains,
 }
 
-/// Immutable generation settings for one world.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerrainGenerator {
     pub seed: u64,
@@ -31,14 +28,8 @@ impl TerrainGenerator {
         Self { seed }
     }
 
-    /// Generates one 16×16×16 vertical section at horizontal chunk (x, z)
-    /// and vertical section coordinate section_y.
-    pub fn generate_section(
-        &self,
-        chunk_x: i32,
-        section_y: i32,
-        chunk_z: i32,
-    ) -> Chunk {
+    /// Generates one 16×16×16 vertical section at horizontal chunk (x, z).
+    pub fn generate_section(&self, chunk_x: i32, section_y: i32, chunk_z: i32) -> Chunk {
         let mut chunk = Chunk::new();
 
         for local_x in 0..CHUNK_EDGE {
@@ -55,7 +46,7 @@ impl TerrainGenerator {
                     } else if world_y > surface {
                         BlockId::AIR
                     } else {
-                        self.block_at_depth(biome, surface - world_y)
+                        block_at_depth(biome, surface - world_y)
                     };
 
                     if !block.is_air() {
@@ -69,9 +60,12 @@ impl TerrainGenerator {
     }
 
     pub fn biome_at(&self, world_x: i32, world_z: i32) -> Biome {
-        let temperature = value_noise(self.seed ^ 0xA076_1D64_78BD_642F, world_x, world_z, 192);
-        let moisture = value_noise(self.seed ^ 0xE703_7ED1_A0B4_28DB, world_x, world_z, 160);
-        let elevation = value_noise(self.seed ^ 0x8EBC_6AF0_9C88_C6E3, world_x, world_z, 112);
+        let temperature =
+            value_noise(self.seed ^ 0xA076_1D64_78BD_642F, world_x, world_z, 192);
+        let moisture =
+            value_noise(self.seed ^ 0xE703_7ED1_A0B4_28DB, world_x, world_z, 160);
+        let elevation =
+            value_noise(self.seed ^ 0x8EBC_6AF0_9C88_C6E3, world_x, world_z, 112);
 
         if elevation > 0.48 {
             Biome::Mountains
@@ -86,8 +80,18 @@ impl TerrainGenerator {
 
     pub fn surface_height(&self, world_x: i32, world_z: i32) -> i32 {
         let continent = value_noise(self.seed, world_x, world_z, 128);
-        let hills = value_noise(self.seed ^ 0xD1B5_4A32_D192_ED03, world_x, world_z,  forty_eight());
-        let detail = value_noise(self.seed ^ 0x94D0_49BB_1331_11EB, world_x, world_z, 24);
+        let hills = value_noise(
+            self.seed ^ 0xD1B5_4A32_D192_ED03,
+            world_x,
+            world_z,
+            48,
+        );
+        let detail = value_noise(
+            self.seed ^ 0x94D0_49BB_1331_11EB,
+            world_x,
+            world_z,
+            24,
+        );
         let biome = self.biome_at(world_x, world_z);
 
         let biome_offset = match biome {
@@ -101,24 +105,36 @@ impl TerrainGenerator {
             .round()
             .clamp(8.0, 62.0) as i32
     }
+}
 
-    fn block_at_depth(&self, biome: Biome, depth: i32) -> BlockId {
-        match biome {
-            Biome::Desert => {
-                if depth < 5 { BlockId::SAND } else { BlockId::STONE }
+fn block_at_depth(biome: Biome, depth: i32) -> BlockId {
+    match biome {
+        Biome::Desert => {
+            if depth < 5 {
+                BlockId::SAND
+            } else {
+                BlockId::STONE
             }
-            Biome::Mountains => {
-                if depth == 0 { BlockId::STONE } else if depth < 4 { BlockId::DIRT } else { BlockId::STONE }
+        }
+        Biome::Mountains => {
+            if depth == 0 {
+                BlockId::STONE
+            } else if depth < 4 {
+                BlockId::DIRT
+            } else {
+                BlockId::STONE
             }
-            Biome::Plains | Biome::Forest => {
-                if depth == 0 { BlockId::GRASS } else if depth < 4 { BlockId::DIRT } else { BlockId::STONE }
+        }
+        Biome::Plains | Biome::Forest => {
+            if depth == 0 {
+                BlockId::GRASS
+            } else if depth < 4 {
+                BlockId::DIRT
+            } else {
+                BlockId::STONE
             }
         }
     }
-}
-
-fn forty_eight() -> i32 {
-    48
 }
 
 fn value_noise(seed: u64, x: i32, z: i32, scale: i32) -> f64 {
