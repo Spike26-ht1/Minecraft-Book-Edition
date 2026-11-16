@@ -7,7 +7,7 @@ mod android {
 
     use book64_gles::GlesRenderer;
     use jni::objects::JObject;
-    use jni::sys::{jfloat, jint, jstring};
+    use jni::sys::{jfloat, jint, jlong, jstring};
     use jni::JNIEnv;
 
     static RENDERER: OnceLock<Mutex<Option<GlesRenderer>>> = OnceLock::new();
@@ -25,12 +25,16 @@ mod android {
     pub extern "system" fn Java_dev_bookedition_game_NativeBridge_nativeSurfaceCreated(
         _env: JNIEnv<'_>,
         _this: JObject<'_>,
+        seed: jlong,
     ) {
         let result = unsafe {
-            GlesRenderer::initialize(|name| {
-                let name = CString::new(name).expect("OpenGL symbol name");
-                eglGetProcAddress(name.as_ptr())
-            })
+            GlesRenderer::initialize(
+                |name| {
+                    let name = CString::new(name).expect("OpenGL symbol name");
+                    eglGetProcAddress(name.as_ptr())
+                },
+                seed as u64,
+            )
         };
 
         let mut slot = renderer_slot()
