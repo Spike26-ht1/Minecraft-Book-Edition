@@ -27,6 +27,10 @@ The first scene renders deterministic grass/dirt/stone terrain generated from a 
 
 **This is not yet a Minecraft-compatible client.** Mobile controls currently move a free camera through the test scene; there is not yet player collision, gravity, grounded jumping, persistent world, inventory, entities, multiplayer, Bedrock protocol implementation or Resource Pack texture loading.
 
+## Optional official Bedrock installation detection
+
+The launcher includes a read-only Android package probe for `com.mojang.minecraftpe`. This reports installation/version and signer fingerprints for diagnostics only; it does not prove purchase or license ownership. Resource Packs must be selected by the user through Android's document picker or supplied as files they are authorized to use. The app does not access Minecraft's private data or bundle Mojang assets. See [docs/BEDROCK_INSTALLATION_INTEGRATION.md](docs/BEDROCK_INSTALLATION_INTEGRATION.md).
+
 ## Architecture
 
 - `launcher/app/`: main Android launcher and app entry point.
