@@ -66,11 +66,11 @@ impl TerrainGenerator {
         let moisture = value_noise(self.seed ^ 0xE703_7ED1_A0B4_28DB, world_x, world_z, 160);
         let elevation = value_noise(self.seed ^ 0x8EBC_6AF0_9C88_C6E3, world_x, world_z, 112);
 
-        if elevation > 0.48 {
+        if elevation > 0.76 {
             Biome::Mountains
         } else if temperature > 0.28 && moisture < -0.08 {
             Biome::Desert
-        } else if moisture > 0.18 {
+        } else if moisture > 0.80 {
             Biome::Forest
         } else {
             Biome::Plains
@@ -203,6 +203,29 @@ mod tests {
         let local_y = surface_y.rem_euclid(CHUNK_EDGE);
         let section = generator.generate_section(0, section_y, 0);
         assert!(!section.get_block(0, local_y, 0).is_air());
+    }
+
+    #[test]
+    fn default_test_seed_has_more_than_one_surface_biome_in_the_spawn_region() {
+        let generator = TerrainGenerator::new(20261116);
+        let mut has_plains = false;
+        let mut has_forest = false;
+        let mut has_mountains = false;
+
+        for x in (-32..48).step_by(4) {
+            for z in (-32..48).step_by(4) {
+                match generator.biome_at(x, z) {
+                    Biome::Plains => has_plains = true,
+                    Biome::Forest => has_forest = true,
+                    Biome::Mountains => has_mountains = true,
+                    Biome::Desert => {}
+                }
+            }
+        }
+
+        assert!(has_plains);
+        assert!(has_forest);
+        assert!(has_mountains);
     }
 
     #[test]
