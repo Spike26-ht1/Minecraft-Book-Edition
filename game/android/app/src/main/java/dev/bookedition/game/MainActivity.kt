@@ -200,7 +200,7 @@ class MainActivity : Activity() {
         ))
         hud = GameHud(this, root, bridge) { hud?.let { showGameSettings(it) } }
         hud?.attach()
-        root.addView(label("CENA VOXEL DE TESTE  •  PRÉ-ALPHA", 9f, Color.WHITE, false).apply {
+        root.addView(label("MUNDO LOCAL  •  PRÉ-ALPHA", 9f, Color.WHITE, false).apply {
             setPadding(dp(12), dp(8), dp(12), dp(8))
             background = rounded(Color.argb(160, 12, 19, 29), dp(10))
         }, FrameLayout.LayoutParams(
