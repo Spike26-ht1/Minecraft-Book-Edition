@@ -191,13 +191,13 @@ mod tests {
     fn block_lookup_crosses_positive_and_negative_chunk_boundaries() {
         let mut world = World::generate(7, 1, 4);
 
-        assert!(world.set_block(15, 90, 0, BlockId::STONE));
-        assert!(world.set_block(16, 90, 0, BlockId::DIRT));
-        assert!(world.set_block(-1, 90, 0, BlockId::SAND));
+        assert!(world.set_block(15, 30, 0, BlockId::STONE));
+        assert!(world.set_block(16, 30, 0, BlockId::DIRT));
+        assert!(world.set_block(-1, 30, 0, BlockId::SAND));
 
-        assert_eq!(world.block_at(15, 90, 0), BlockId::STONE);
-        assert_eq!(world.block_at(16, 90, 0), BlockId::DIRT);
-        assert_eq!(world.block_at(-1, 90, 0), BlockId::SAND);
+        assert_eq!(world.block_at(15, 30, 0), BlockId::STONE);
+        assert_eq!(world.block_at(16, 30, 0), BlockId::DIRT);
+        assert_eq!(world.block_at(-1, 30, 0), BlockId::SAND);
     }
 
     #[test]
