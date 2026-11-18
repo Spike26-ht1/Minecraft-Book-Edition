@@ -1,69 +1,75 @@
 # Roadmap
 
-## G0 — integrated app and first voxel scene
+The project is an independent Bedrock client written in Rust. The launcher is the Android host, not the game itself. Work is organized around player-visible game systems and versioned compatibility, not repeated renderer demonstrations.
 
-- [x] Preserve the existing launcher foundation.
-- [x] Create a separate clean Rust game foundation.
-- [x] Package the game Activity as a library inside the launcher APK.
-- [x] Connect launcher **Jogar** to the embedded game menu.
-- [x] Add game menu with Play, Settings and Exit.
-- [x] Add landscape immersive game scene.
-- [x] Add block/chunk storage, deterministic test terrain and CPU meshing.
-- [x] Add Book64 OpenGL ES 3.0 rendering path.
-- [ ] Verify Rust tests and Android ARM64 APK in CI.
-- [ ] Install and validate on a physical Android device.
+## G0 — Android host and native rendering foundation
 
-## G1 — playable voxel prototype
+- [x] Keep the launcher as the single Android application entry point.
+- [x] Package the game runtime in the launcher APK.
+- [x] Add a landscape game Activity and mobile HUD.
+- [x] Add Book64 OpenGL ES 3.0 backend.
+- [x] Add world block storage, procedural test generation and CPU meshing.
+- [x] Add seeded world creation and pass seed through JNI.
+- [x] Add F3 telemetry and frame pacing settings.
+- [x] Build ARM64 native library and combined debug APK in CI.
+- [ ] Validate the current playable-session build on a physical Android device.
 
-- [x] Add first-person free-camera look and touch movement controls for the mobile prototype.
-- [x] Add a first-pass F3 diagnostic panel with measured FPS/frame time, viewport, heap and native camera telemetry.
-- [x] Add an in-game test menu for F3 visibility, mobile controls and camera sensitivity.
-- [ ] Add a fixed-step simulation loop, player physics, collision and grounded jumping.
-- [ ] Add block ray selection and basic block interaction.
-- [x] Add a 5 × 5 generated chunk region and horizontal/vertical cross-chunk neighbor lookup.
-- [ ] Add mesh invalidation and bounded chunk loading.
-- [x] Add persistent VSync / uncapped FPS selection for the Android renderer.
-- [ ] Add a full pause menu and persistent graphics settings.
-- [ ] Expand F3 with biome, light, targeted block and player/world data as those systems become available.
+## G1 — first independent single-player session
 
-## G2 — world foundation
+- [x] Add a world model containing loaded chunk columns and 16 × 16 × 16 sections.
+- [x] Separate world storage from mesh generation and rendering.
+- [x] Add `book-game` as the owner of single-player session state.
+- [x] Add fixed 20 Hz simulation independent of render frame rate.
+- [x] Add player position, velocity, view rotation and grounded state.
+- [x] Add horizontal movement, gravity, jump input and basic solid-block collision.
+- [x] Make Book64 render immutable simulation snapshots instead of owning a free camera.
+- [x] Make the JNI host own the simulation session and renderer separately.
+- [ ] Add block targeting / ray selection.
+- [ ] Add block breaking and placement with world mutations.
+- [ ] Add world save, close and reopen flow.
+- [ ] Add inventory data model and first hotbar interaction.
 
-- [x] Add the first versioned, deterministic seeded terrain generator in Rust.
-- [x] Add initial biome classification and terrain surface layers.
-- [x] Test horizontal chunk-boundary face removal and negative world-space placement.
-- [ ] Define versioned block definitions and block states.
-- [ ] Add world metadata (seed, generator version, spawn and settings).
-- [ ] Add world save/load format and recovery tests.
-- [x] Add Android world-creation dialog with numeric/random seed and pass it into Book64.
-- [ ] Add chunk streaming, background generation and unloading.
-- [ ] Add complete biome decoration, caves, ores, water and structures.
-- [ ] Add lighting system.
+## G2 — world lifecycle and streaming
 
-## G3 — renderer
+- [x] Keep the generator deterministic and versioned.
+- [x] Add global block queries across loaded positive and negative chunk coordinates.
+- [ ] Define versioned world metadata: identifier, name, seed, generator version, spawn and settings.
+- [ ] Implement crash-safe save/load for world metadata and changed blocks.
+- [ ] Add round-trip and recovery tests.
+- [ ] Add background chunk generation, bounded work queues and unloading.
+- [ ] Add mesh invalidation for changed blocks and neighboring chunks.
+- [ ] Add height maps, biomes, decoration, water, caves, ores and structures in tested stages.
+- [ ] Port Bedrock 26.60 world generation only after acquiring versioned reference fixtures.
 
-- [x] Add first-pass user Resource Pack import, terrain_texture.json parser and local PNG atlas/index generation.
-- [ ] Upload atlas pages to Book64 GLES and render voxel faces with atlas UVs.
-- [ ] Add multi-page atlases, flipbook textures, material/alpha modes and biome tinting (Mojang assets remain user-supplied unless separately licensed).
-- [ ] Add frustum culling and render-distance controls.
-- [ ] Add GPU resource lifecycle handling.
-- [ ] Profile frame pacing and memory on target devices.
-- [ ] Implement Vulkan behind the Book64 backend boundary.
+## G3 — Bedrock content and rendering
+
+- [x] Parse the first pass of user-supplied Resource Pack terrain texture metadata.
+- [x] Generate a local atlas PNG and texture index.
+- [ ] Upload atlas pages to Book64 and use atlas UVs for block faces.
+- [ ] Implement block definitions, states, material classes and transparency.
+- [ ] Add Bedrock block geometry and render-controller support.
+- [ ] Add flipbook textures, animation, biome tint, lighting and fog.
+- [ ] Add culling, draw batching, GPU resource lifecycle and memory budgets.
+- [ ] Profile on target Android GPUs before adding more rendering features.
 
 ## G4 — Bedrock compatibility
 
-- [ ] Select and document target Bedrock version.
-- [ ] Implement protocol primitives, framing and codecs independently.
-- [ ] Add packet fixtures and interoperability tests.
-- [ ] Implement versioned world/resource readers.
-- [ ] Verify against legitimate user-provided test data.
+- [ ] Pin exact target game build and record format versions separately.
+- [ ] Implement versioned Bedrock registries and data readers.
+- [ ] Implement world/subchunk palette and NBT readers/writers.
+- [ ] Implement protocol framing, packet codecs and transport in isolated modules.
+- [ ] Add versioned fixtures and differential/acceptance tests for each subsystem.
+- [ ] Verify against legitimate user-provided data without bundling proprietary game files.
 
-## G5 — gameplay and platform expansion
+## G5 — full client systems
 
-- [ ] Add inventory, items and entities.
-- [ ] Add authentication and multiplayer after protocol design is tested.
-- [ ] Add Windows host.
-- [ ] Design stable public extension APIs and Book Loader after core client maturity.
+- [ ] Entities, mob behaviour and animation.
+- [ ] Items, inventory, crafting and containers.
+- [ ] Audio, HUD, pause/settings screens and accessibility.
+- [ ] Authentication and multiplayer once local single-player is stable.
+- [ ] Windows host.
+- [ ] Design Book Loader after core client behaviour and data contracts stabilize.
 
 ## Release discipline
 
-A CI artifact is not a device-verified build. Each test release must state version, ABI, renderer, included features, known limitations and the exact CI/device validation status.
+Every test build must state its version, ABI, renderer, included systems, known limitations, CI result and device-test status. CI success does not mean the APK has been tested on a physical device.
