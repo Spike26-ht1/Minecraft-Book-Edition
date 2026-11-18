@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/book-core",
     "crates/book-world",
+    "crates/book-game",
     "crates/book-meshing",
     "crates/book64-gles",
     "crates/book-android",
