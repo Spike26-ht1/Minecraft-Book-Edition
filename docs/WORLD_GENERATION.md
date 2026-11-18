@@ -7,6 +7,8 @@ O crate `book-world` contém um gerador procedural determinístico com seed:
 - `TerrainGenerator::new(seed)` cria as configurações de geração.
 - O menu **JOGAR → Criar mundo** aceita uma seed numérica ou gera uma seed aleatória; a seleção é lembrada localmente e enviada ao Book64 pelo JNI.
 - `generate_section(chunk_x, section_y, chunk_z)` gera uma seção vertical 16×16×16.
+- `World::generate(seed, radius, vertical_sections)` cria colunas carregadas; consultas globais atravessam fronteiras de chunks positivos e negativos.
+- O crate `book-game` possui a sessão single-player, relógio fixo de 20 TPS e estado do jogador. O renderer não é dono da posição nem da física.
 - A mesma seed, versão do algoritmo e coordenadas geram os mesmos blocos.
 - As coordenadas do terreno são absolutas; chunks vizinhos consultam a mesma função de altura e de bioma.
 - Coordenadas negativas usam divisão euclidiana.
@@ -20,7 +22,7 @@ O crate `book-world` contém um gerador procedural determinístico com seed:
 
 Esta é uma base procedural própria, não uma reprodução do gerador oficial Bedrock. Os biomas ainda não possuem árvores, vegetação, rios, oceanos, cavernas, minérios, estruturas, clima ou distribuição completa de blocos. A região 5×5 é gerada na inicialização e ainda não existe streaming, descarregamento ou atualização incremental de malha.
 
-A câmera é livre e ainda não possui colisão, gravidade ou física de jogador. A seed selecionada é lembrada nas preferências locais, mas ainda não existe um arquivo de mundo com blocos persistidos. A seed e a versão do gerador precisam ser gravadas nos metadados de cada mundo. Ao mudar o algoritmo no futuro, devemos criar uma nova versão em vez de alterar silenciosamente mundos existentes.
+A primeira sessão agora tem jogador simulado com movimento horizontal, gravidade, salto e colisão AABB básica. Ainda não há raycast, edição de blocos ou persistência. A seed selecionada é lembrada nas preferências locais, mas ainda não existe um arquivo de mundo com blocos persistidos. A seed e a versão do gerador precisam ser gravadas nos metadados de cada mundo. Ao mudar o algoritmo no futuro, devemos criar uma nova versão em vez de alterar silenciosamente mundos existentes.
 
 ## Próximas etapas
 
