@@ -461,8 +461,12 @@ private class BookRenderer(
 }
 
 internal class NativeBridge {
-    fun setMovement(forward: Float, strafe: Float, vertical: Float) {
-        if (available) nativeSetMovement(forward, strafe, vertical)
+    fun setMovement(forward: Float, strafe: Float) {
+        if (available) nativeSetMovement(forward, strafe)
+    }
+
+    fun jump() {
+        if (available) nativeJump()
     }
 
     fun look(yawDelta: Float, pitchDelta: Float) {
@@ -486,8 +490,9 @@ internal class NativeBridge {
     private external fun nativeSurfaceCreated(seed: Long)
     private external fun nativeSurfaceChanged(width: Int, height: Int)
     private external fun nativeDrawFrame()
-    private external fun nativeSetMovement(forward: Float, strafe: Float, vertical: Float)
+    private external fun nativeSetMovement(forward: Float, strafe: Float)
     private external fun nativeLook(yawDelta: Float, pitchDelta: Float)
+    private external fun nativeJump()
     private external fun nativeGetDebugInfo(): String
 
     companion object {
