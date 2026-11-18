@@ -13,7 +13,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import java.util.Locale
 
-/** Touch HUD for the first playable Book Edition camera prototype. */
+/** Touch HUD for the first Book Edition single-player session. */
 internal class GameHud(
     private val activity: Activity,
     private val root: FrameLayout,
@@ -29,7 +29,6 @@ internal class GameHud(
     private var sensitivity = 0.0035f
     private var forward = 0f
     private var strafe = 0f
-    private var vertical = 0f
     private var fps = 0
     private var frameMs = 0.0
     private var nativeInfo = "Book64 initializing"
@@ -95,7 +94,7 @@ internal class GameHud(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
         }
-        controls.addView(controlRow("▲") { holdButton(it, 1f, 0f) })
+        controls.addView(controlRow("▲") { holdButton(it, 1f) })
         val middle = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -103,7 +102,7 @@ internal class GameHud(
         middle.addView(directionButton("◀", -1f))
         middle.addView(directionButton("▶", 1f))
         controls.addView(middle)
-        controls.addView(controlRow("▼") { holdButton(it, -1f, 0f) })
+        controls.addView(controlRow("▼") { holdButton(it, -1f) })
         root.addView(controls, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT,
             FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -113,8 +112,8 @@ internal class GameHud(
         jumpButton = hudButton("SUBIR").apply {
             setOnTouchListener { _, event ->
                 when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> { vertical = 1f; sendMovement(); true }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { vertical = 0f; sendMovement(); true }
+                    MotionEvent.ACTION_DOWN -> { bridge.jump(); true }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> true
                     else -> true
                 }
             }
@@ -199,23 +198,21 @@ internal class GameHud(
             }
         }
 
-    private fun holdButton(event: MotionEvent, forwardValue: Float, verticalValue: Float): Boolean {
+    private fun holdButton(event: MotionEvent, forwardValue: Float): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 forward = forwardValue
-                vertical = verticalValue
                 sendMovement()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 forward = 0f
-                vertical = 0f
                 sendMovement()
             }
         }
         return true
     }
 
-    private fun sendMovement() = bridge.setMovement(forward, strafe, vertical)
+    private fun sendMovement() = bridge.setMovement(forward, strafe)
 
     private fun hudButton(text: String) = TextView(activity).apply {
         this.text = text
