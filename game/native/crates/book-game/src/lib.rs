@@ -227,7 +227,8 @@ impl GameSession {
         }
 
         let mut candidate = self.player.position;
-        set_component(&mut candidate, axis, component(candidate, axis) + displacement);
+        let candidate_position = component(candidate, axis) + displacement;
+        set_component(&mut candidate, axis, candidate_position);
 
         if !self.collides_at(candidate) {
             self.player.position = candidate;
