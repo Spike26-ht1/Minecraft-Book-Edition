@@ -3,8 +3,8 @@
 //! Rendering reads a snapshot from this crate. The simulation never calls GPU,
 //! Android or window APIs.
 
-use glam::Vec3;
 use book_world::{BlockId, World};
+use glam::Vec3;
 
 const TICKS_PER_SECOND: f64 = 20.0;
 const FIXED_STEP_SECONDS: f64 = 1.0 / TICKS_PER_SECOND;
@@ -111,8 +111,7 @@ impl GameSession {
             return;
         }
         self.player.yaw_radians += yaw_delta;
-        self.player.pitch_radians =
-            (self.player.pitch_radians + pitch_delta).clamp(-1.52, 1.52);
+        self.player.pitch_radians = (self.player.pitch_radians + pitch_delta).clamp(-1.52, 1.52);
     }
 
     /// Queues one jump. Holding the Android button does not cause repeated
@@ -130,21 +129,16 @@ impl GameSession {
             return 0;
         }
 
-        self.accumulator_seconds +=
-            (frame_delta_seconds as f64).min(MAX_FRAME_DELTA_SECONDS);
+        self.accumulator_seconds += (frame_delta_seconds as f64).min(MAX_FRAME_DELTA_SECONDS);
         let mut steps = 0;
 
-        while self.accumulator_seconds >= FIXED_STEP_SECONDS
-            && steps < MAX_STEPS_PER_FRAME
-        {
+        while self.accumulator_seconds >= FIXED_STEP_SECONDS && steps < MAX_STEPS_PER_FRAME {
             self.tick(FIXED_STEP_SECONDS as f32);
             self.accumulator_seconds -= FIXED_STEP_SECONDS;
             steps += 1;
         }
 
-        if steps == MAX_STEPS_PER_FRAME
-            && self.accumulator_seconds >= FIXED_STEP_SECONDS
-        {
+        if steps == MAX_STEPS_PER_FRAME && self.accumulator_seconds >= FIXED_STEP_SECONDS {
             self.accumulator_seconds = self.accumulator_seconds.min(FIXED_STEP_SECONDS);
         }
 
@@ -175,8 +169,7 @@ impl GameSession {
         let yaw = self.player.yaw_radians;
         let forward = Vec3::new(yaw.cos(), 0.0, yaw.sin());
         let right = forward.cross(Vec3::Y).normalize_or_zero();
-        let wish = (forward * self.input.forward + right * self.input.strafe)
-            .normalize_or_zero()
+        let wish = (forward * self.input.forward + right * self.input.strafe).normalize_or_zero()
             * PLAYER_SPEED;
 
         let acceleration = if self.player.grounded {
