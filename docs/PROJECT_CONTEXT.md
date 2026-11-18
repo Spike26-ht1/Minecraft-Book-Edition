@@ -1,84 +1,62 @@
 # Minecraft Book Edition — contexto do projeto
 
 ## Objetivo
-Criar um projeto independente chamado Minecraft Book Edition, aberto, documentado e fácil de entender para desenvolvedores e modders. O foco inicial é estabelecer uma base de launcher Android e, em seguida, avançar na integração/execução do Minecraft Bedrock.
 
-## Prioridades
-1. Evoluir o cliente/jogo independente e o motor Book64, mantendo o launcher como entrada única.
-2. Validar cada build Android ARM64 em CI e em dispositivo físico.
-3. Definir e implementar compatibilidade Bedrock por etapas, sem copiar o cliente oficial.
-4. Deixar APIs de mods e Book Loader para etapas posteriores.
+Minecraft Book Edition é uma reimplementação independente do cliente Minecraft Bedrock, escrita principalmente em Rust. A meta não é apenas criar um launcher para abrir o jogo oficial. O launcher Android é o host e distribuidor do runtime próprio do Book Edition.
 
-## Plataforma e tecnologia
-- Android ARM64 é a primeira plataforma-alvo.
-- Windows também está no escopo futuro.
-- Launcher Android: Kotlin, Jetpack Compose e Material Design 3.
-- Componentes de baixo nível do jogo: Rust.
-- Plano gráfico inicial: OpenGL / OpenGL ES.
-- Vulkan poderá ser adicionado futuramente como opção.
-- Preparar integração Rust sem bloquear a interface Android inicial.
+## Direção aprovada
 
-## Arquitetura planejada
-- launcher/: aplicativo, interface, configurações, gestão de versões e logs.
-- minecraft/: componentes e dados do cliente, recursos, bibliotecas e runtime.
-- crates/: componentes Rust reutilizáveis.
-- android/launcher/: integração Android do launcher.
-- android/media/: diretório reservado para mídias do projeto.
-- docs/: documentação de arquitetura, decisões e desenvolvimento.
-- tests/: testes.
+- Cliente independente em Rust, com Bedrock 26.60 como alvo de compatibilidade.
+- Kotlin + Jetpack Compose para o launcher Android.
+- Um único APK contendo launcher e runtime próprio do jogo.
+- Book64 como fronteira de renderização; OpenGL ES primeiro, Vulkan futuro.
+- Android ARM64 primeiro; Windows futuro.
+- Referências: Horizon para engenharia de paridade e organização de sistemas; Cinnabar para arquitetura de cliente Bedrock em Rust; LeviLauncher para organização do launcher Android e preparação de conteúdo.
+- Estudar referências não significa copiar código. Licenças são registradas em [REFERENCE_STUDY.md](REFERENCE_STUDY.md).
 
-## Dados privados no Android
-Os dados de execução ficam no armazenamento privado do aplicativo, separados do código-fonte:
-- launcher/settings/
-- launcher/logs/
-- launcher/versions/
-- minecraft/assets/
-- minecraft/libraries/
-- minecraft/resources/
-- minecraft/worlds/
-- minecraft/cache/
+## Arquitetura atual
 
-O launcher centraliza os logs, registra inicialização e eventos selecionados e permite exportação manual de relatórios. Não há upload automático de logs.
+- `book-core`: coordenadas e tipos compartilhados.
+- `book-world`: blocos, seções, colunas carregadas, consultas de blocos e geração própria.
+- `book-game`: sessão single-player, relógio fixo de 20 TPS, input, jogador, gravidade, salto e colisão básica.
+- `book-meshing`: extração de geometria a partir de snapshots do mundo.
+- `book64-gles`: renderer OpenGL ES que consome snapshots, sem controlar a simulação.
+- `book-android`: composição JNI da sessão e renderer.
+- `launcher/app`: entrada Android, interface, configurações, arquivos e logs.
 
-## Referência arquitetural: Cinnabar
-O Cinnabar foi estudado como referência de organização e separação de componentes. Suas ideias podem inspirar a arquitetura, mas o Book Edition terá implementação própria. Não copiar código do Cinnabar. Verificar licenças de dependências individualmente.
+A simulação deve permanecer independente da taxa de quadros. O mundo é a fonte de verdade; a malha é uma representação derivada; o renderer só apresenta snapshots.
 
-## Decisão ainda pendente
-Definir se o cliente Bedrock será um cliente independente implementado para compatibilidade com Bedrock ou uma integração que carrega o cliente oficial instalado pelo usuário. Essa escolha afeta a arquitetura do runtime e não deve ser presumida.
+## Estado do primeiro marco jogável
+
+Implementado no código, aguardando validação CI e teste físico da versão correspondente:
+- Mundo carregado com região inicial de 5 × 5 colunas e quatro seções verticais.
+- Consulta de blocos por coordenadas globais, incluindo coordenadas negativas.
+- Sessão single-player em Rust.
+- Simulação fixa de 20 ticks por segundo.
+- Movimento horizontal, gravidade, salto e colisão básica contra blocos sólidos.
+- Book64 recebe posição/câmera de um snapshot da sessão.
+- Controles Android enviam movimento e pedido de salto para a simulação.
+- F3 exibe posição do jogador, estado no chão, seed, versão do gerador, colunas carregadas e tick atual.
+
+Limites ainda existentes:
+- O gerador é algoritmo próprio Book Edition v1, não é o gerador Bedrock.
+- A região é limitada; não existe streaming.
+- O mesh é criado na inicialização; edição do mundo ainda não invalida/reconstrói malhas.
+- Não existe raycast, quebrar/colocar blocos, inventário funcional, salvamento/reabertura, entidades, áudio, protocolo, autenticação ou multiplayer.
+- O importador cria atlas local, mas Book64 ainda não o envia à GPU.
+- Não declarar compatibilidade Bedrock até haver leitores e testes por versão.
+
+## Dados e segurança no Android
+
+O runtime e os mundos usam armazenamento privado do aplicativo por padrão. O launcher registra logs localmente e permite exportação manual. Não há upload automático de logs. A detecção de `com.mojang.minecraftpe` é apenas diagnóstica; não prova licença e não dá acesso ao sandbox privado de outro app. Recursos externos só devem ser lidos por mecanismos Android autorizados, como o seletor de documentos, e não devem ser redistribuídos.
 
 ## Regras de desenvolvimento
-- Não reutilizar o código antigo do projeto como base do novo produto.
-- Preservar o histórico do GitHub; não substituir main sem autorização explícita.
-- Não incluir nem redistribuir assets proprietários do Minecraft.
-- Não declarar builds ou testes como concluídos sem execução real.
-- Manter documentação clara e incremental.
 
-## Launcher — histórico da fundação 0.1.0-dev.2
-A build de testes do launcher inclui:
-- Navegação entre Início, Versões, Ajustes e Logs.
-- Tema claro/escuro com preferência persistente.
-- Opção para registrar eventos detalhados localmente.
-- Criação de diretórios privados para configurações, versões, recursos e mundos.
-- Visualização e exportação manual dos logs.
-- Botão Jogar desativado enquanto o cliente Bedrock não estiver integrado.
-
-A build não inclui cliente Bedrock, autenticação, instalação de versões de jogo ou execução de mundos. O APK de depuração é produzido pelo workflow do GitHub Actions e não é uma versão de distribuição final.
-
-
-## Atualização — integração launcher + jogo
-
-- O launcher é a entrada única do aplicativo Android.
-- O módulo `game/android/app` é uma Android Library chamada `:game-runtime`, incluída no projeto Gradle raiz.
-- O APK do launcher incorpora a Activity do jogo e a biblioteca Rust/JNI.
-- O botão Jogar do launcher inicia `dev.bookedition.game.MainActivity` por Intent explícito.
-- O menu do jogo aparece antes da cena: Jogar, Configurações e Sair.
-- A cena voxel de teste só é criada depois da seleção de Jogar no menu do jogo.
-- A cena tem HUD mobile com câmera por toque, direcional, movimento vertical e botão de menu.
-- O painel F3 inicial mede FPS/frame time, resolução, heap Android e telemetria nativa de câmera/viewport/vértices.
-- O menu de teste alterna F3 e controles e permite ajustar a sensibilidade.
-- Os controles atuais movimentam uma câmera livre; física, colisão, gravidade e pulo com chão ainda não existem.
-- A integração de texturas Bedrock Samples depende de leitor de Resource Pack e assets fornecidos pelo usuário; os arquivos proprietários da Mojang não serão copiados para o repositório ou APK.
-- Branch de integração: `launcher/game-integration`.
-- As branches `launcher/foundation` e `game/clean-foundation` permanecem preservadas.
-- A compilação CI deve gerar um único APK debug com launcher + jogo, ABI arm64-v8a.
-- Ainda não declarar build validada até CI passar e instalação física ser testada.
+- Trabalhar na branch `launcher/game-integration`; não alterar `main` nem fazer merge sem autorização explícita.
+- Não reutilizar o código do protótipo abandonado.
+- Não copiar código do Horizon ou Cinnabar.
+- Revisar a licença de cada dependência.
+- Não incluir assets, binários ou credenciais proprietários da Mojang/Microsoft.
+- Validar com testes Rust, formatação, build Android ARM64 e teste físico.
+- Não declarar build ou sistema como pronto sem evidência real.
+- Cada incremento deve entregar um sistema permanente e testável do jogo, não apenas outra cena de demonstração.
