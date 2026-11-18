@@ -71,7 +71,10 @@ impl World {
     /// separate systems and are deliberately not hidden inside this type.
     pub fn generate(seed: u64, horizontal_radius: i32, vertical_sections: i32) -> Self {
         assert!(horizontal_radius >= 0, "chunk radius cannot be negative");
-        assert!(vertical_sections > 0, "world needs at least one vertical section");
+        assert!(
+            vertical_sections > 0,
+            "world needs at least one vertical section"
+        );
 
         let generator = TerrainGenerator::new(seed);
         let mut columns = HashMap::new();
@@ -79,9 +82,7 @@ impl World {
         for chunk_x in -horizontal_radius..=horizontal_radius {
             for chunk_z in -horizontal_radius..=horizontal_radius {
                 let sections = (0..vertical_sections)
-                    .map(|section_y| {
-                        generator.generate_section(chunk_x, section_y, chunk_z)
-                    })
+                    .map(|section_y| generator.generate_section(chunk_x, section_y, chunk_z))
                     .collect();
                 columns.insert(
                     ChunkPosition {
@@ -135,13 +136,7 @@ impl World {
     }
 
     /// Changes a block in a loaded column. Returns false outside loaded data.
-    pub fn set_block(
-        &mut self,
-        world_x: i32,
-        world_y: i32,
-        world_z: i32,
-        block: BlockId,
-    ) -> bool {
+    pub fn set_block(&mut self, world_x: i32, world_y: i32, world_z: i32, block: BlockId) -> bool {
         let position = ChunkPosition {
             x: world_x.div_euclid(CHUNK_EDGE),
             z: world_z.div_euclid(CHUNK_EDGE),
@@ -165,9 +160,7 @@ impl World {
         let mut columns = self
             .columns
             .iter()
-            .map(|(position, column)| {
-                (position.x, position.z, column.sections.clone())
-            })
+            .map(|(position, column)| (position.x, position.z, column.sections.clone()))
             .collect::<Vec<_>>();
         columns.sort_unstable_by_key(|(x, z, _)| (*x, *z));
         columns
