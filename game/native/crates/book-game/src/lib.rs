@@ -251,11 +251,9 @@ impl GameSession {
             }
         }
 
-        set_component(
-            &mut self.player.position,
-            axis,
-            component(self.player.position, axis) + displacement * safe_fraction,
-        );
+        let resolved_position =
+            component(self.player.position, axis) + displacement * safe_fraction;
+        set_component(&mut self.player.position, axis, resolved_position);
         true
     }
 
