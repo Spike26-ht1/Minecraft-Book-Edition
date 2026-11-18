@@ -1,15 +1,15 @@
-//! First Book64 backend: OpenGL ES 3.0 voxel renderer.
+//! Book64 OpenGL ES 3.0 presentation backend.
 //!
-//! This milestone draws a deterministic test chunk with grass, dirt and stone.
-//! It is a renderer proof, not the final terrain or block system.
+//! This crate uploads world meshes and renders immutable simulation snapshots.
+//! Player movement, world state and fixed-step updates belong to book-game.
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::mem::size_of;
 use std::ptr;
-use std::time::Instant;
 
-use book_meshing::{build_chunk_column_mesh, build_chunk_region_mesh};
-use book_world::{TerrainGenerator, TERRAIN_GENERATOR_VERSION};
+use book_game::RenderState;
+use book_meshing::build_chunk_region_mesh;
+use book_world::World;
 use glam::{Mat4, Vec3};
 
 const VERTEX_SHADER: &str = r#"#version 300 es
@@ -23,9 +23,6 @@ void main() {
 }
 "#;
 
-const GENERATED_VERTICAL_SECTIONS: i32 = 4;
-const GENERATED_HORIZONTAL_RADIUS: i32 = 2;
-
 const FRAGMENT_SHADER: &str = r#"#version 300 es
 precision mediump float;
 in vec3 v_color;
@@ -35,10 +32,7 @@ void main() {
 }
 "#;
 
-/// Owns the GPU resources for the Book64 voxel test scene.
-///
-/// All methods must be called on the thread where the current EGL context is
-/// bound. The Android host guarantees this by calling them from GLSurfaceView.
+/// Owns OpenGL resources only. The game session is owned by the runtime host.
 pub struct GlesRenderer {
     program: u32,
     vertex_array: u32,
@@ -47,27 +41,20 @@ pub struct GlesRenderer {
     vertex_count: i32,
     width: i32,
     height: i32,
-    camera_position: Vec3,
-    camera_yaw: f32,
-    camera_pitch: f32,
-    move_forward: f32,
-    move_strafe: f32,
-    move_vertical: f32,
-    last_frame: Instant,
     gpu_vendor: String,
     gpu_renderer: String,
     gles_version: String,
-    world_seed: u64,
+    last_render_state: Option<RenderState>,
 }
 
 impl GlesRenderer {
-    /// Loads GLES entry points and uploads the first generated voxel chunk.
+    /// Loads GLES entry points and uploads a snapshot of the loaded world.
     ///
     /// # Safety
     /// A valid OpenGL ES 3.0 context must be current on the calling thread.
     pub unsafe fn initialize(
         loader: impl FnMut(&'static str) -> *const c_void,
-        world_seed: u64,
+        world: &World,
     ) -> Result<Self, String> {
         gl::load_with(loader);
 
@@ -110,21 +97,11 @@ impl GlesRenderer {
             return Err("Book64 could not locate the u_mvp uniform".to_owned());
         }
 
-        let generator = TerrainGenerator::new(world_seed);
-        let mut columns =
-            Vec::with_capacity(((GENERATED_HORIZONTAL_RADIUS * 2 + 1).pow(2)) as usize);
-        for chunk_x in -GENERATED_HORIZONTAL_RADIUS..=GENERATED_HORIZONTAL_RADIUS {
-            for chunk_z in -GENERATED_HORIZONTAL_RADIUS..=GENERATED_HORIZONTAL_RADIUS {
-                let sections = (0..GENERATED_VERTICAL_SECTIONS)
-                    .map(|section_y| generator.generate_section(chunk_x, section_y, chunk_z))
-                    .collect::<Vec<_>>();
-                columns.push((chunk_x, chunk_z, sections));
-            }
-        }
+        let columns = world.columns_for_meshing();
         let mesh = build_chunk_region_mesh(&columns);
         if mesh.is_empty() {
             gl::DeleteProgram(program);
-            return Err("The test chunk produced an empty mesh".to_owned());
+            return Err("The loaded world produced an empty mesh".to_owned());
         }
 
         let mut vertices = Vec::with_capacity(mesh.vertex_count() * 6);
@@ -175,17 +152,10 @@ impl GlesRenderer {
             vertex_count,
             width: 1,
             height: 1,
-            camera_position: Vec3::new(26.0, 40.0, 26.0),
-            camera_yaw: -2.356,
-            camera_pitch: -0.31,
-            move_forward: 0.0,
-            move_strafe: 0.0,
-            move_vertical: 0.0,
-            last_frame: Instant::now(),
             gpu_vendor,
             gpu_renderer,
             gles_version,
-            world_seed,
+            last_render_state: None,
         })
     }
 
@@ -199,29 +169,26 @@ impl GlesRenderer {
         gl::Viewport(0, 0, self.width, self.height);
     }
 
-    /// Renders one animated voxel terrain frame.
+    /// Renders one immutable state produced by book-game.
     ///
     /// # Safety
     /// A valid OpenGL ES context must be current on the calling thread.
-    pub unsafe fn draw(&mut self) {
-        let now = Instant::now();
-        let delta_seconds = (now - self.last_frame).as_secs_f32().clamp(0.0, 0.1);
-        self.last_frame = now;
-        let forward = self.camera_front();
-        let right = forward.cross(Vec3::Y).normalize_or_zero();
-        let movement =
-            forward * self.move_forward + right * self.move_strafe + Vec3::Y * self.move_vertical;
-        self.camera_position += movement * (6.0 * delta_seconds);
-
+    pub unsafe fn draw(&mut self, state: RenderState) {
+        self.last_render_state = Some(state);
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         gl::UseProgram(self.program);
 
         let aspect = self.width as f32 / self.height as f32;
-        let projection = Mat4::perspective_rh_gl(48.0_f32.to_radians(), aspect, 0.1, 100.0);
-        let front = self.camera_front();
-        let view = Mat4::look_at_rh(self.camera_position, self.camera_position + front, Vec3::Y);
-        let model = Mat4::IDENTITY;
-        let mvp = projection * view * model;
+        let projection = Mat4::perspective_rh_gl(70.0_f32.to_radians(), aspect, 0.05, 192.0);
+        let eye = Vec3::from_array(state.eye_position);
+        let front = Vec3::new(
+            state.yaw_radians.cos() * state.pitch_radians.cos(),
+            state.pitch_radians.sin(),
+            state.yaw_radians.sin() * state.pitch_radians.cos(),
+        )
+        .normalize_or_zero();
+        let view = Mat4::look_at_rh(eye, eye + front, Vec3::Y);
+        let mvp = projection * view;
 
         gl::UniformMatrix4fv(
             self.mvp_location,
@@ -239,36 +206,35 @@ impl GlesRenderer {
         self.vertex_count as usize
     }
 
-    pub fn set_movement(&mut self, forward: f32, strafe: f32, vertical: f32) {
-        self.move_forward = forward.clamp(-1.0, 1.0);
-        self.move_strafe = strafe.clamp(-1.0, 1.0);
-        self.move_vertical = vertical.clamp(-1.0, 1.0);
-    }
-
-    pub fn rotate_camera(&mut self, yaw_delta: f32, pitch_delta: f32) {
-        self.camera_yaw += yaw_delta;
-        self.camera_pitch = (self.camera_pitch + pitch_delta).clamp(-1.45, 1.45);
-    }
-
     pub fn debug_info(&self) -> String {
+        let Some(state) = self.last_render_state else {
+            return "Book64 ready; waiting for the first simulation frame".to_owned();
+        };
+        let position = state.player_position;
+        let block = [
+            position[0].floor() as i32,
+            position[1].floor() as i32,
+            position[2].floor() as i32,
+        ];
+        let chunk = [block[0].div_euclid(16), block[2].div_euclid(16)];
+
         format!(
-            "XYZ: {:.2}, {:.2}, {:.2}\nBlock: {}, {}, {}\nChunk: {}, {}, {}\nYaw/Pitch: {:.2} / {:.2}\nWorld seed: {}\nGenerator: {}\nChunk region: {} × {} | {} vertical sections\nViewport: {} × {}\nVertices: {}\nGPU vendor: {}\nGPU: {}\nGLES: {}",
-            self.camera_position.x,
-            self.camera_position.y,
-            self.camera_position.z,
-            self.camera_position.x.floor() as i32,
-            self.camera_position.y.floor() as i32,
-            self.camera_position.z.floor() as i32,
-            (self.camera_position.x.floor() as i32).div_euclid(16),
-            (self.camera_position.y.floor() as i32).div_euclid(16),
-            (self.camera_position.z.floor() as i32).div_euclid(16),
-            self.camera_yaw.to_degrees(),
-            self.camera_pitch.to_degrees(),
-            self.world_seed as i64,
-            TERRAIN_GENERATOR_VERSION,
-            GENERATED_HORIZONTAL_RADIUS * 2 + 1,
-            GENERATED_HORIZONTAL_RADIUS * 2 + 1,
-            GENERATED_VERTICAL_SECTIONS,
+            "Player XYZ: {:.2}, {:.2}, {:.2}\nBlock: {}, {}, {}\nChunk XZ: {}, {}\nYaw/Pitch: {:.2} / {:.2}\nGrounded: {}\nWorld seed: {}\nGenerator: {}\nLoaded columns: {}\nGame tick: {} (20 TPS)\nViewport: {} × {}\nVertices: {}\nGPU vendor: {}\nGPU: {}\nGLES: {}",
+            position[0],
+            position[1],
+            position[2],
+            block[0],
+            block[1],
+            block[2],
+            chunk[0],
+            chunk[1],
+            state.yaw_radians.to_degrees(),
+            state.pitch_radians.to_degrees(),
+            state.grounded,
+            state.world_seed as i64,
+            state.generator_version,
+            state.loaded_columns,
+            state.game_tick,
             self.width,
             self.height,
             self.vertex_count,
@@ -276,15 +242,6 @@ impl GlesRenderer {
             self.gpu_renderer,
             self.gles_version
         )
-    }
-
-    fn camera_front(&self) -> Vec3 {
-        Vec3::new(
-            self.camera_yaw.cos() * self.camera_pitch.cos(),
-            self.camera_pitch.sin(),
-            self.camera_yaw.sin() * self.camera_pitch.cos(),
-        )
-        .normalize_or_zero()
     }
 }
 
@@ -359,14 +316,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn seeded_terrain_column_has_visible_voxel_geometry() {
-        let generator = TerrainGenerator::new(42);
-        let sections = (0..GENERATED_VERTICAL_SECTIONS)
-            .map(|section_y| generator.generate_section(0, section_y, 0))
-            .collect::<Vec<_>>();
-        let mesh = build_chunk_column_mesh(&sections);
+    fn generated_world_produces_a_visible_mesh_for_the_renderer() {
+        let world = World::generate(42, 2, 4);
+        let mesh = build_chunk_region_mesh(&world.columns_for_meshing());
 
         assert!(!mesh.is_empty());
         assert_eq!(mesh.vertex_count() % 3, 0);
+    }
+
+    #[test]
+    fn render_state_is_not_owned_or_mutated_by_the_renderer() {
+        let state = RenderState {
+            player_position: [1.0, 20.0, 3.0],
+            eye_position: [1.0, 21.62, 3.0],
+            yaw_radians: 0.0,
+            pitch_radians: 0.0,
+            grounded: true,
+            world_seed: 42,
+            generator_version: 1,
+            loaded_columns: 25,
+            game_tick: 20,
+        };
+        let copy = state;
+        assert_eq!(state, copy);
     }
 }
