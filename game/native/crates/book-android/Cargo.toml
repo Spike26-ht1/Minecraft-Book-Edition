@@ -8,6 +8,7 @@ license.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
+book-game = { path = "../book-game" }
 book64-gles = { path = "../book64-gles" }
 
 [target.'cfg(target_os = "android")'.dependencies]
