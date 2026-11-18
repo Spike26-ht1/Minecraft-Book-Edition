@@ -1,0 +1,9 @@
+[package]
+name = "book-game"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+book-world = { path = "../book-world" }
+glam.workspace = true
