@@ -169,6 +169,31 @@ impl GlesRenderer {
         gl::Viewport(0, 0, self.width, self.height);
     }
 
+
+    /// Rebuilds the uploaded world mesh after the simulation changes blocks.
+    ///
+    /// # Safety
+    /// A valid OpenGL ES context must be current on the calling thread.
+    pub unsafe fn update_world(&mut self, world: &World) {
+        let columns = world.columns_for_meshing();
+        let mesh = build_chunk_region_mesh(&columns);
+        let mut vertices = Vec::with_capacity(mesh.vertex_count() * 6);
+        for vertex in mesh.vertices {
+            vertices.extend_from_slice(&vertex.position);
+            vertices.extend_from_slice(&vertex.color);
+        }
+
+        gl::BindBuffer(gl::ARRAY_BUFFER, self.vertex_buffer);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (vertices.len() * size_of::<f32>()) as isize,
+            vertices.as_ptr().cast(),
+            gl::DYNAMIC_DRAW,
+        );
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        self.vertex_count = (vertices.len() / 6) as i32;
+    }
+
     /// Renders one immutable state produced by book-game.
     ///
     /// # Safety

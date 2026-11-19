@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 book-game = { path = "../book-game" }
+book-world = { path = "../book-world" }
 book64-gles = { path = "../book64-gles" }
 
 [target.'cfg(target_os = "android")'.dependencies]
