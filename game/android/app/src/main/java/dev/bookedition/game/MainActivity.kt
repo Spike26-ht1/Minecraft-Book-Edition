@@ -27,6 +27,7 @@ class MainActivity : Activity() {
     private var gameSurface: GLSurfaceView? = null
     private var showingGame = false
     private var gameRenderer: BookRenderer? = null
+    private var gameBridge: NativeBridge? = null
     private val resourcePackRequestCode = 501
     private var selectedWorldSeed: Long = 20261116L
 
@@ -47,6 +48,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        gameBridge?.saveWorld()
         gameSurface?.onPause()
         super.onPause()
     }
@@ -59,8 +61,11 @@ class MainActivity : Activity() {
     @Deprecated("Returns from the world scene to the game menu.")
     override fun onBackPressed() {
         if (showingGame) {
+            gameBridge?.saveWorld()
             gameSurface?.onPause()
             gameSurface = null
+            gameRenderer = null
+            gameBridge = null
             showingGame = false
             showMainMenu()
         } else {
@@ -180,10 +185,16 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(9, 14, 23))
         }
         val bridge = NativeBridge()
+        gameBridge = bridge
+        val saveDirectory = getExternalMediaDirs().firstOrNull()
+            ?.let { java.io.File(it, "book-edition/worlds") }
+            ?.takeIf { it.exists() || it.mkdirs() }
+            ?: java.io.File(filesDir, "book_worlds").apply { mkdirs() }
+        val worldSavePath = java.io.File(saveDirectory, "world_${selectedWorldSeed}.bookworld").absolutePath
         var hud: GameHud? = null
         val initialUncapped = getSharedPreferences("book_settings", MODE_PRIVATE)
             .getBoolean("uncapped_fps", false)
-        val renderer = BookRenderer(bridge, initialUncapped, selectedWorldSeed) { currentFps, frameMs, mode ->
+        val renderer = BookRenderer(bridge, initialUncapped, selectedWorldSeed, worldSavePath) { currentFps, frameMs, mode ->
             hud?.updateFrame(currentFps, frameMs, mode)
         }
         gameRenderer = renderer
@@ -316,9 +327,11 @@ class MainActivity : Activity() {
     }
 
     private fun returnToMainMenu() {
+        gameBridge?.saveWorld()
         gameSurface?.onPause()
         gameSurface = null
         gameRenderer = null
+        gameBridge = null
         showingGame = false
         showMainMenu()
     }
@@ -392,6 +405,7 @@ private class BookRenderer(
     private val bridge: NativeBridge,
     initialUncapped: Boolean,
     private val worldSeed: Long,
+    private val worldSavePath: String,
     private val onFrameStats: (Int, Double, String) -> Unit
 ) : GLSurfaceView.Renderer {
     @Volatile
@@ -430,7 +444,7 @@ private class BookRenderer(
         gl: javax.microedition.khronos.opengles.GL10?,
         config: javax.microedition.khronos.egl.EGLConfig?
     ) {
-        bridge.surfaceCreated(worldSeed)
+        bridge.surfaceCreated(worldSeed, worldSavePath)
         applyFramePacing()
     }
 
@@ -465,6 +479,18 @@ internal class NativeBridge {
         if (available) nativeSetMovement(forward, strafe)
     }
 
+    fun breakBlock() {
+        if (available) nativeBreakBlock()
+    }
+
+    fun placeBlock() {
+        if (available) nativePlaceBlock()
+    }
+
+    fun saveWorld() {
+        if (available) nativeSaveWorld()
+    }
+
     fun jump() {
         if (available) nativeJump()
     }
@@ -475,8 +501,8 @@ internal class NativeBridge {
 
     fun debugInfo(): String = if (available) nativeGetDebugInfo() else "Book64 unavailable"
 
-    fun surfaceCreated(seed: Long) {
-        if (available) nativeSurfaceCreated(seed)
+    fun surfaceCreated(seed: Long, savePath: String) {
+        if (available) nativeSurfaceCreated(seed, savePath)
     }
 
     fun surfaceChanged(width: Int, height: Int) {
@@ -487,12 +513,15 @@ internal class NativeBridge {
         if (available) nativeDrawFrame()
     }
 
-    private external fun nativeSurfaceCreated(seed: Long)
+    private external fun nativeSurfaceCreated(seed: Long, savePath: String)
     private external fun nativeSurfaceChanged(width: Int, height: Int)
     private external fun nativeDrawFrame()
     private external fun nativeSetMovement(forward: Float, strafe: Float)
     private external fun nativeLook(yawDelta: Float, pitchDelta: Float)
     private external fun nativeJump()
+    private external fun nativeBreakBlock()
+    private external fun nativePlaceBlock()
+    private external fun nativeSaveWorld()
     private external fun nativeGetDebugInfo(): String
 
     companion object {

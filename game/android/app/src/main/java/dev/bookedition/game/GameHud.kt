@@ -23,6 +23,7 @@ internal class GameHud(
     private val debugPanel = TextView(activity)
     private lateinit var controls: LinearLayout
     private lateinit var jumpButton: TextView
+    private lateinit var actionButtons: LinearLayout
     private var debugVisible = false
     private var controlsVisible = true
     private var sensitivityLevel = 1
@@ -121,6 +122,24 @@ internal class GameHud(
         root.addView(jumpButton, FrameLayout.LayoutParams(dp(92), dp(58), Gravity.BOTTOM or Gravity.END).apply {
             setMargins(0, 0, dp(24), dp(28))
         })
+
+        actionButtons = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        actionButtons.addView(hudButton("QUEBRAR").apply {
+            setOnClickListener { bridge.breakBlock() }
+        }, LinearLayout.LayoutParams(dp(92), dp(46)).apply {
+            setMargins(0, 0, dp(8), 0)
+        })
+        actionButtons.addView(hudButton("COLOCAR").apply {
+            setOnClickListener { bridge.placeBlock() }
+        }, LinearLayout.LayoutParams(dp(92), dp(46)))
+        root.addView(actionButtons, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.END
+        ).apply { setMargins(0, 0, dp(24), dp(98)) })
     }
 
     private var lastTouchX = 0f
@@ -156,6 +175,7 @@ internal class GameHud(
         controlsVisible = !controlsVisible
         controls.visibility = if (controlsVisible) View.VISIBLE else View.GONE
         jumpButton.visibility = if (controlsVisible) View.VISIBLE else View.GONE
+        actionButtons.visibility = if (controlsVisible) View.VISIBLE else View.GONE
         return controlsVisible
     }
 
