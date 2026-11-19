@@ -4,7 +4,7 @@ mod generation;
 mod world;
 
 pub use generation::{Biome, TerrainGenerator, TERRAIN_GENERATOR_VERSION};
-pub use world::{ChunkColumn, ChunkPosition, World};
+pub use world::{ChunkColumn, ChunkPosition, World, WorldSaveError};
 
 use book_core::CHUNK_EDGE;
 
