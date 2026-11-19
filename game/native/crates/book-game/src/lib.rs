@@ -132,7 +132,6 @@ impl GameSession {
         self.pending_jump = true;
     }
 
-
     /// Returns the first non-air block intersected by the camera ray (5 blocks).
     pub fn targeted_block(&self) -> Option<BlockHit> {
         let origin = self.player.position + Vec3::Y * PLAYER_EYE_HEIGHT;
@@ -208,8 +207,12 @@ impl GameSession {
         if hit.block == BlockId::BEDROCK {
             return false;
         }
-        self.world
-            .set_block(hit.position[0], hit.position[1], hit.position[2], BlockId::AIR)
+        self.world.set_block(
+            hit.position[0],
+            hit.position[1],
+            hit.position[2],
+            BlockId::AIR,
+        )
     }
 
     /// Places one dirt block against the targeted face when the space is clear.
@@ -219,7 +222,10 @@ impl GameSession {
             return false;
         };
         let position = hit.adjacent;
-        if !self.world.block_at(position[0], position[1], position[2]).is_air()
+        if !self
+            .world
+            .block_at(position[0], position[1], position[2])
+            .is_air()
             || self.player_intersects_block(position)
         {
             return false;
@@ -430,7 +436,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn player_can_target_mine_and_place_blocks_in_first_person() {
         let mut session = GameSession::new(42);
@@ -439,14 +444,20 @@ mod tests {
         let direction_y = session.player.pitch_radians.sin();
         let distance = (3.0 - session.player.position.x) / direction_x;
         let target_y = (eye_y + direction_y * distance).floor() as i32;
-        assert!(session.world_mut().set_block(3, target_y, 0, BlockId::STONE));
+        assert!(session
+            .world_mut()
+            .set_block(3, target_y, 0, BlockId::STONE));
 
-        let hit = session.targeted_block().expect("stone block should be in view");
+        let hit = session
+            .targeted_block()
+            .expect("stone block should be in view");
         assert_eq!(hit.position, [3, target_y, 0]);
         assert!(session.break_targeted_block());
         assert!(session.world().block_at(3, target_y, 0).is_air());
 
-        assert!(session.world_mut().set_block(3, target_y, 0, BlockId::STONE));
+        assert!(session
+            .world_mut()
+            .set_block(3, target_y, 0, BlockId::STONE));
         assert!(session.place_targeted_block());
         assert_eq!(session.world().block_at(2, target_y, 0), BlockId::DIRT);
     }

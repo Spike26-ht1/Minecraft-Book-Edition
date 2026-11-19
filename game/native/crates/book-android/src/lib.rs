@@ -27,9 +27,14 @@ mod android {
 
     fn persist_world(runtime: &GameRuntime) -> Result<(), String> {
         if !runtime.save_enabled {
-            return Err("saving is disabled because the existing world could not be loaded".to_owned());
+            return Err(
+                "saving is disabled because the existing world could not be loaded".to_owned(),
+            );
         }
-        let path = runtime.save_path.as_ref().ok_or("world save path is unavailable")?;
+        let path = runtime
+            .save_path
+            .as_ref()
+            .ok_or("world save path is unavailable")?;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
@@ -62,7 +67,10 @@ mod android {
         world_path: JString<'_>,
     ) {
         let seed = seed as u64;
-        let path_text: String = env.get_string(&world_path).map(|value| value.into()).unwrap_or_default();
+        let path_text: String = env
+            .get_string(&world_path)
+            .map(|value| value.into())
+            .unwrap_or_default();
         let save_path = if path_text.trim().is_empty() {
             None
         } else {
@@ -210,7 +218,6 @@ mod android {
             runtime.session.request_jump();
         }
     }
-
 
     #[no_mangle]
     pub extern "system" fn Java_dev_bookedition_game_NativeBridge_nativeBreakBlock(

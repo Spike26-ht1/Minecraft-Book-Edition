@@ -110,7 +110,6 @@ impl World {
         self.generator_version
     }
 
-
     /// Encodes the complete loaded world into the versioned local save format.
     /// Sorting columns makes identical worlds produce byte-identical files.
     pub fn encode(&self) -> Vec<u8> {
@@ -262,7 +261,6 @@ impl World {
     }
 }
 
-
 const WORLD_SAVE_MAGIC: &[u8; 8] = b"BOOKWLD1";
 const WORLD_SAVE_FORMAT: u32 = 1;
 const MAX_SAVE_COLUMNS: u32 = 1024;
@@ -310,26 +308,40 @@ impl<'a> WorldSaveReader<'a> {
     }
 
     fn take(&mut self, length: usize) -> Result<&'a [u8], WorldSaveError> {
-        let end = self.offset.checked_add(length).ok_or(WorldSaveError::LimitExceeded)?;
-        let value = self.bytes.get(self.offset..end).ok_or(WorldSaveError::Truncated)?;
+        let end = self
+            .offset
+            .checked_add(length)
+            .ok_or(WorldSaveError::LimitExceeded)?;
+        let value = self
+            .bytes
+            .get(self.offset..end)
+            .ok_or(WorldSaveError::Truncated)?;
         self.offset = end;
         Ok(value)
     }
 
     fn u16(&mut self) -> Result<u16, WorldSaveError> {
-        Ok(u16::from_le_bytes(self.take(2)?.try_into().expect("two-byte slice")))
+        Ok(u16::from_le_bytes(
+            self.take(2)?.try_into().expect("two-byte slice"),
+        ))
     }
 
     fn u32(&mut self) -> Result<u32, WorldSaveError> {
-        Ok(u32::from_le_bytes(self.take(4)?.try_into().expect("four-byte slice")))
+        Ok(u32::from_le_bytes(
+            self.take(4)?.try_into().expect("four-byte slice"),
+        ))
     }
 
     fn i32(&mut self) -> Result<i32, WorldSaveError> {
-        Ok(i32::from_le_bytes(self.take(4)?.try_into().expect("four-byte slice")))
+        Ok(i32::from_le_bytes(
+            self.take(4)?.try_into().expect("four-byte slice"),
+        ))
     }
 
     fn u64(&mut self) -> Result<u64, WorldSaveError> {
-        Ok(u64::from_le_bytes(self.take(8)?.try_into().expect("eight-byte slice")))
+        Ok(u64::from_le_bytes(
+            self.take(8)?.try_into().expect("eight-byte slice"),
+        ))
     }
 
     fn is_finished(&self) -> bool {
@@ -340,7 +352,6 @@ impl<'a> WorldSaveReader<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn binary_save_round_trips_seed_negative_chunks_and_block_edits() {
@@ -353,7 +364,10 @@ mod tests {
 
         assert_eq!(restored.seed(), original.seed());
         assert_eq!(restored.generator_version(), original.generator_version());
-        assert_eq!(restored.loaded_column_count(), original.loaded_column_count());
+        assert_eq!(
+            restored.loaded_column_count(),
+            original.loaded_column_count()
+        );
         assert_eq!(restored.block_at(-1, 23, 16), BlockId::GRASS);
         assert_eq!(restored.block_at(16, 31, -1), BlockId::SAND);
         assert_eq!(restored.block_at(0, 0, 0), original.block_at(0, 0, 0));
@@ -365,7 +379,10 @@ mod tests {
         let world = World::generate(7, 1, 4);
         let mut encoded = world.encode();
         encoded.truncate(encoded.len() - 1);
-        assert!(matches!(World::decode(&encoded), Err(WorldSaveError::Truncated)));
+        assert!(matches!(
+            World::decode(&encoded),
+            Err(WorldSaveError::Truncated)
+        ));
     }
 
     #[test]

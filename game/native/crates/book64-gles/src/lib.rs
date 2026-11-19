@@ -169,7 +169,6 @@ impl GlesRenderer {
         gl::Viewport(0, 0, self.width, self.height);
     }
 
-
     /// Rebuilds the uploaded world mesh after the simulation changes blocks.
     ///
     /// # Safety
