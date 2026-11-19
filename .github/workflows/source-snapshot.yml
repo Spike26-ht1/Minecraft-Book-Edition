@@ -2,6 +2,11 @@ name: Book Edition source snapshot
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - launcher/game-integration
+    paths:
+      - ".github/workflows/source-snapshot.yml"
 
 permissions:
   contents: read
