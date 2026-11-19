@@ -18,23 +18,22 @@ The launcher and game runtime are packaged together in one APK. The in-game menu
 The current Rust layers are:
 
 - `book-core`: shared coordinates and low-level types.
-- `book-world`: loaded world columns, 16 × 16 × 16 sections, block lookup/mutation, and the current versioned procedural generator.
-- `book-game`: single-player session, fixed 20 TPS simulation clock, player state, movement, gravity, jumping and basic block collision.
-- `book-meshing`: CPU mesh extraction and shared-face removal across loaded chunks.
+- `book-world`: loaded world columns, 16 × 16 × 16 sections, block lookup/mutation, deterministic generation and a bounded versioned binary world-save format.
+- `book-game`: single-player session, fixed 20 TPS simulation, player movement/physics, first-person block targeting, mining and block placement.
+- `book-meshing`: CPU mesh extraction and shared-face removal across loaded chunks; world edits trigger a render-thread mesh rebuild.
 - `book64-gles`: OpenGL ES presentation of a world mesh and immutable player render snapshots.
 - `book-android`: Android JNI runtime composition; it owns the game session and renderer as separate objects.
 
 The mobile directional pad now controls a simulated player. Touch drag rotates the view. The jump button requests a jump; it no longer moves the camera upward. The F3 panel reads telemetry from the game session and Book64.
 
-The current generator is Book Edition's own algorithm version 1; it is **not** Bedrock's seed algorithm. The loaded world currently contains a 5 × 5 region of horizontal chunk columns and four vertical sections per column.
+The current generator is Book Edition's own algorithm version 1; it is **not** Bedrock's seed algorithm. The loaded world currently contains a 5 × 5 region of horizontal chunk columns and four vertical sections per column. The current local save format preserves loaded blocks, seed and generator version; reopening returns the player to the generated spawn point.
 
 ## Not implemented yet
 
 This milestone is the beginning of the playable client, not Bedrock parity. The following remain future work:
 
-- Saving and reopening world data.
-- Breaking/placing blocks and block ray selection.
-- Chunk streaming, background generation, unloading and mesh invalidation.
+- Player position, inventory/hotbar and entity persistence.
+- Chunk streaming, background generation and unloading.
 - Bedrock-compatible block states, registries, world formats and world generation.
 - Uploading imported Resource Pack atlases to the GPU and using real block UVs/materials.
 - Lighting, entities, inventory, audio, UI screens, protocol, authentication and multiplayer.

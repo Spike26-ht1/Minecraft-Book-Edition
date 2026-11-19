@@ -12,8 +12,8 @@ android {
         applicationId = "dev.bookedition.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.1.0-dev.11"
+        versionCode = 12
+        versionName = "0.1.0-dev.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

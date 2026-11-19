@@ -25,11 +25,11 @@ Book Edition APK
 ## Rust boundaries
 
 - **book-core:** shared coordinates and low-level contracts.
-- **book-world:** block identifiers, chunk sections, loaded columns, global block lookup and terrain generation. World data is independent of Android and rendering.
-- **book-game:** session lifecycle, player state, input intent, fixed-step simulation, movement, gravity, jump and collision. It owns the authoritative state for the current single-player session.
+- **book-world:** block identifiers, chunk sections, loaded columns, global block lookup, terrain generation and a versioned binary save codec. World data is independent of Android and rendering.
+- **book-game:** session lifecycle, player state, input intent, fixed-step simulation, movement, gravity, jump, collision and first-person block interaction. It owns the authoritative state for the current single-player session.
 - **book-meshing:** converts a world snapshot into visible geometry and removes shared faces. It does not own or mutate the world.
 - **Book64:** uploads geometry and renders immutable `RenderState` snapshots. It does not own player movement, physics, world generation or input.
-- **book-android:** owns the native runtime composition and exposes a narrow JNI boundary. It holds the game session and renderer separately.
+- **book-android:** owns the native runtime composition and exposes a narrow JNI boundary. It holds the game session, renderer and local world-save path separately.
 - **Kotlin launcher/game host:** handles Android lifecycle, user interface, touch input, file selection and local logs. It does not implement game rules.
 
 Future boundaries will be added when the corresponding systems exist: `book-save`, `book-assets`, `book-streaming`, `book-protocol` and client presentation/UI modules.
@@ -60,7 +60,7 @@ Book64 ← book-meshing ← world snapshot
 OpenGL ES frame
 ```
 
-The mesh is currently built once when the session renderer initializes. World edits, mesh invalidation, chunk streaming and save/load are not yet connected. The current 5 × 5 loaded region is a bounded initial world, not an infinite-world implementation.
+The initial mesh is uploaded at renderer initialization. Mining and placement mark it dirty; Book64 rebuilds and uploads it on the GL render thread. The world remains a bounded 5 × 5 loaded region. Local save files preserve the loaded block sections, seed and generator version; player position, inventory, streaming and infinite-world loading are not yet implemented.
 
 ## Compatibility and validation
 

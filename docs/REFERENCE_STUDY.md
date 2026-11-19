@@ -96,3 +96,20 @@ O projeto não incorpora assets proprietários do Minecraft no repositório ou A
 A dev.10 inaugura a separação de sessão e simulação: mundo carregado, jogador com movimento horizontal, gravidade, salto e colisão básica, atualização fixa de 20 TPS e renderer que consome um snapshot. Isso ainda não é paridade Bedrock e ainda não inclui salvamento, interação com blocos, streaming ou atlas na GPU.
 
 A próxima entrega deverá acrescentar interação real e persistência de mundo, não aumentar a cena de demonstração sem necessidade.
+
+
+## Atualização de estratégia e auditoria de worldgen — 2026-11-19
+
+A análise do código atual do Horizon confirma que `crates/horizon-world/src/worldgen/` é uma implementação orientada aos formatos, registries, parâmetros de noise e ordem de geração da Java Edition 26.3. O próprio módulo descreve que a geração completa do terreno ainda está pendente. O crate depende de `horizon-core`, `horizon-assets`, `horizon-threads` e bibliotecas adicionais. Portanto, não é um gerador Bedrock que possa ser conectado diretamente ao Book World.
+
+Decisão: reutilizar métodos de engenharia — etapas de geração isoladas, workers, dados versionados, testes diferenciais e armazenamento independente —, mas implementar separadamente os algoritmos e dados específicos de Bedrock 26.60. Qualquer reutilização de código LGPL exige revisão da licença aplicável, preservação de avisos e cumprimento de obrigações; esta entrega não copia código Horizon ou Cinnabar.
+
+A auditoria do Cinnabar `dev` mostra cliente Rust separado de núcleo Go de transporte/autenticação; o README informa PolyForm Noncommercial 1.0.0 e descreve BDS como backend para mundos locais. O projeto permanece referência arquitetural e não dependência incorporada.
+
+### dev.12 — primeiro ciclo de interação e persistência local
+
+- Adicionado formato local `BOOKWLD1`, versionado e limitado, que salva os blocos das colunas carregadas, seed e versão do gerador.
+- O runtime Android reabre o mundo salvo pela seed selecionada e grava em arquivo temporário com sincronização e renomeação.
+- Adicionado raycast de primeira pessoa, mineração e colocação inicial de bloco, com atualização da malha no thread OpenGL.
+- A colocação ainda usa Dirt fixa e não representa inventário/hotbar. Posição do jogador e entidades não são persistidas.
+- O formato `BOOKWLD1` é exclusivo do Book Edition e não é formato de mundo Bedrock.

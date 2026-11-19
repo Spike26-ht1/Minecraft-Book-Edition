@@ -24,9 +24,9 @@ The project is an independent Bedrock client written in Rust. The launcher is th
 - [x] Add horizontal movement, gravity, jump input and basic solid-block collision.
 - [x] Make Book64 render immutable simulation snapshots instead of owning a free camera.
 - [x] Make the JNI host own the simulation session and renderer separately.
-- [ ] Add block targeting / ray selection.
-- [ ] Add block breaking and placement with world mutations.
-- [ ] Add world save, close and reopen flow.
+- [x] Add first-person block targeting / ray selection.
+- [x] Add block breaking and placement with world mutations.
+- [x] Add versioned local world save, close and reopen flow.
 - [ ] Add inventory data model and first hotbar interaction.
 
 ## G2 — world lifecycle and streaming
@@ -34,8 +34,9 @@ The project is an independent Bedrock client written in Rust. The launcher is th
 - [x] Keep the generator deterministic and versioned.
 - [x] Add global block queries across loaded positive and negative chunk coordinates.
 - [ ] Define versioned world metadata: identifier, name, seed, generator version, spawn and settings.
-- [ ] Implement crash-safe save/load for world metadata and changed blocks.
-- [ ] Add round-trip and recovery tests.
+- [x] Implement bounded binary save/load for loaded chunk sections.
+- [x] Add deterministic round-trip and truncated-file rejection tests.
+- [ ] Persist player position, inventory and world metadata.
 - [ ] Add background chunk generation, bounded work queues and unloading.
 - [ ] Add mesh invalidation for changed blocks and neighboring chunks.
 - [ ] Add height maps, biomes, decoration, water, caves, ores and structures in tested stages.
