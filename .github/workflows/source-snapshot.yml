@@ -1,0 +1,27 @@
+name: Book Edition source snapshot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout development branch
+        uses: actions/checkout@v4
+        with:
+          ref: launcher/game-integration
+      - name: Create source archive
+        run: |
+          mkdir -p dist
+          git archive --format=zip --prefix=Book-Edition/ HEAD -o dist/Book-Edition-source.zip
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-edition-source-dev12
+          path: dist/Book-Edition-source.zip
+          if-no-files-found: error
+          retention-days: 14
